@@ -1,0 +1,601 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  PROMOTED
+  ROLLED_BACK
+  TRANSFERRED
+  INACTIVE
+}
+
+enum MovementType {
+  PROMOTION
+  ROLLBACK
+  TRANSFER
+  MANUAL_CHANGE
+}
+
+enum QuestionType {
+  MCQ
+  TRUE_FALSE
+  MULTIPLE_CORRECT
+  NUMERICAL
+  SHORT_ANSWER
+  LONG_ANSWER
+  IMAGE_BASED
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum ResultVisibility {
+  IMMEDIATE
+  AFTER_DEADLINE
+  TEACHER_RELEASE
+}
+
+enum MultiAttemptRule {
+  FIRST
+  LATEST
+  BEST
+  TEACHER_SELECTED
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  STARTED
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum AttemptStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_SUBMITTED
+  INVALIDATED
+}
+
+enum RetakeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+enum AttendanceMethod {
+  TEACHER
+  STUDENT_CHECKIN
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String?   @unique
+  username     String?   @unique
+  passwordHash String
+  role         UserRole  @default(TEACHER)
+  name         String
+  phone        String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  createdExams         Exam[]              @relation("ExamCreator")
+  attendanceSessions   AttendanceSession[] @relation("AttendanceCreator")
+  reviewedRetakes      RetakeRequest[]     @relation("RetakeReviewer")
+  teacherRemarks       TeacherRemark[]     @relation("RemarkAuthor")
+}
+
+model Student {
+  id          String        @id @default(uuid())
+  studentCode String        @unique // e.g. STU-000001
+  name        String
+  pinHash     String // Hashed 4-digit PIN
+  status      StudentStatus @default(ACTIVE)
+  dateOfBirth DateTime?
+  phone       String?
+  joinedAt    DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  enrollments        StudentEnrollment[]
+  academicMovements  AcademicMovement[]
+  examAssignments    ExamAssignment[]
+  examAttempts       ExamAttempt[]
+  results            Result[]
+  retakeRequests     RetakeRequest[]
+  attendanceRecords  AttendanceRecord[]
+  teacherRemarks     TeacherRemark[]
+
+  @@index([status])
+}
+
+model AcademicSession {
+  id        String   @id @default(uuid())
+  name      String   @unique // e.g. "2026-27"
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  enrollments        StudentEnrollment[]
+  attendanceSessions AttendanceSession[]
+  teacherRemarks     TeacherRemark[]
+}
+
+model Class {
+  id          String   @id @default(uuid())
+  classNumber Int      @unique // e.g. 6, 7, 8, 9, 10
+  name        String // e.g. "Class 8"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  classSubjects      ClassSubject[]
+  chapters           Chapter[]
+  enrollments        StudentEnrollment[]
+  questions          Question[]
+  exams              Exam[]
+  attendanceSessions AttendanceSession[]
+}
+
+model Subject {
+  id        String   @id @default(uuid())
+  name      String // e.g. "Physics"
+  code      String   @unique // e.g. "PHY"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  classSubjects ClassSubject[]
+  chapters      Chapter[]
+  questions     Question[]
+  exams         Exam[]
+}
+
+model ClassSubject {
+  id        String   @id @default(uuid())
+  classId   String
+  subjectId String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  class   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, subjectId])
+}
+
+model Chapter {
+  id          String   @id @default(uuid())
+  classId     String
+  subjectId   String
+  name        String
+  description String?
+  orderNumber Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  class     Class      @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topics    Topic[]
+  questions Question[]
+  exams     Exam[]
+
+  @@index([classId, subjectId])
+}
+
+model Topic {
+  id          String   @id @default(uuid())
+  chapterId   String
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chapter   Chapter    @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  questions Question[]
+
+  @@index([chapterId])
+}
+
+model StudentEnrollment {
+  id                       String           @id @default(uuid())
+  studentId                String
+  academicSessionId        String
+  classId                  String
+  rollNumber               String // e.g. "08-2627-001"
+  status                   EnrollmentStatus @default(ACTIVE)
+  promotedFromEnrollmentId String?
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+
+  student         Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  academicSession AcademicSession   @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  class           Class             @relation(fields: [classId], references: [id], onDelete: Restrict)
+  promotedFrom    StudentEnrollment? @relation("EnrollmentProgression", fields: [promotedFromEnrollmentId], references: [id])
+  promotedTo      StudentEnrollment[] @relation("EnrollmentProgression")
+
+  outgoingMovements AcademicMovement[] @relation("FromEnrollment")
+  incomingMovements AcademicMovement[] @relation("ToEnrollment")
+
+  @@unique([academicSessionId, classId, rollNumber])
+  @@index([studentId])
+  @@index([rollNumber])
+}
+
+model AcademicMovement {
+  id               String       @id @default(uuid())
+  studentId        String
+  fromEnrollmentId String?
+  toEnrollmentId   String
+  movementType     MovementType
+  reason           String?
+  performedBy      String? // Admin / User ID
+  createdAt        DateTime     @default(now())
+
+  student        Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  fromEnrollment StudentEnrollment? @relation("FromEnrollment", fields: [fromEnrollmentId], references: [id], onDelete: SetNull)
+  toEnrollment   StudentEnrollment  @relation("ToEnrollment", fields: [toEnrollmentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+}
+
+model Question {
+  id           String             @id @default(uuid())
+  customId     String?            @unique // e.g. "PHY8-WEP-001"
+  classId      String?
+  subjectId    String?
+  chapterId    String?
+  topicId      String?
+  questionType QuestionType       @default(MCQ)
+  difficulty   QuestionDifficulty @default(MEDIUM)
+  questionText String
+  explanation  String?
+  defaultMarks Float              @default(1.0)
+  imageSrc     String?
+  imageAlt     String?
+  isActive     Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  class          Class?           @relation(fields: [classId], references: [id], onDelete: SetNull)
+  subject        Subject?         @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  chapter        Chapter?         @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  topic          Topic?           @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  options        QuestionOption[]
+  examQuestions  ExamQuestion[]
+  attemptAnswers AttemptAnswer[]
+
+  @@index([classId, subjectId])
+  @@index([topicId])
+}
+
+model QuestionOption {
+  id          String   @id @default(uuid())
+  questionId  String
+  optionKey   String // "A", "B", "C", "D"
+  optionText  String
+  isCorrect   Boolean  @default(false)
+  orderNumber Int      @default(0)
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+}
+
+model Exam {
+  id                     String           @id @default(uuid())
+  title                  String
+  classId                String
+  subjectId              String
+  chapterId              String?
+  description            String?
+  instructions           String?
+  startAt                DateTime
+  loginDeadline          DateTime
+  durationMinutes        Int              @default(60)
+  totalMarks             Float            @default(0.0)
+  passingPercentage      Float            @default(80.0)
+  negativeMarkingEnabled Boolean          @default(false)
+  negativeMarkValue      Float            @default(0.0)
+  randomizeQuestions     Boolean          @default(false)
+  randomizeOptions       Boolean          @default(false)
+  maxAttempts            Int              @default(1)
+  resultVisibility       ResultVisibility @default(IMMEDIATE)
+  multiAttemptRule       MultiAttemptRule @default(BEST)
+  status                 ExamStatus       @default(DRAFT)
+  createdBy              String?
+  formatVersion          String           @default("1.0")
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  class          Class             @relation(fields: [classId], references: [id], onDelete: Restrict)
+  subject        Subject           @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  chapter        Chapter?          @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  creator        User?             @relation("ExamCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  gradingRules   ExamGradingRule[]
+  examQuestions  ExamQuestion[]
+  assignments    ExamAssignment[]
+  attempts       ExamAttempt[]
+  results        Result[]
+  retakeRequests RetakeRequest[]
+
+  @@index([classId, subjectId])
+  @@index([status])
+}
+
+model ExamGradingRule {
+  id            String @id @default(uuid())
+  examId        String
+  minPercentage Float
+  maxPercentage Float
+  label         String // "OP — Outstandingly Perfect", "Pass", "Fail"
+  displayOrder  Int    @default(0)
+
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([examId])
+}
+
+model ExamQuestion {
+  id               String   @id @default(uuid())
+  examId           String
+  questionId       String?
+  questionSnapshot Json // Snapshotted question structure (text, options, correct answer, explanation)
+  marks            Float    @default(1.0)
+  orderNumber      Int      @default(0)
+
+  exam            Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question        Question?         @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  attemptQuestions AttemptQuestion[]
+
+  @@index([examId])
+}
+
+model ExamAssignment {
+  id              String           @id @default(uuid())
+  examId          String
+  studentId       String
+  assignedAt      DateTime         @default(now())
+  status          AssignmentStatus @default(ASSIGNED)
+  allowedAttempts Int              @default(1)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  exam     Exam          @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student  Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  attempts ExamAttempt[]
+
+  @@unique([examId, studentId])
+  @@index([studentId])
+}
+
+model ExamAttempt {
+  id              String        @id @default(uuid())
+  examId          String
+  studentId       String
+  assignmentId    String
+  attemptNumber   Int           @default(1)
+  startedAt       DateTime      @default(now())
+  submittedAt     DateTime?
+  serverDeadline  DateTime
+  autoSubmitted   Boolean       @default(false)
+  durationSeconds Int           @default(0)
+  status          AttemptStatus @default(IN_PROGRESS)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  exam             Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student          Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignment       ExamAssignment    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  attemptQuestions AttemptQuestion[]
+  attemptAnswers   AttemptAnswer[]
+  result           Result?
+
+  @@index([examId, studentId])
+  @@index([status])
+}
+
+model AttemptQuestion {
+  id               String  @id @default(uuid())
+  attemptId        String
+  examQuestionId   String
+  questionId       String?
+  displayOrder     Int     @default(0)
+  optionOrder      Json? // Array of option keys in randomized sequence, e.g. ["B", "A", "D", "C"]
+  questionSnapshot Json // Frozen snapshot for student attempt
+
+  attempt      ExamAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  examQuestion ExamQuestion @relation(fields: [examQuestionId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+}
+
+model AttemptAnswer {
+  id              String    @id @default(uuid())
+  attemptId       String
+  questionId      String? // Ref to original question if available
+  selectedOptions Json? // Array of chosen option keys, e.g. ["B"]
+  answerText      String?
+  numericAnswer   Float?
+  isCorrect       Boolean?
+  marksAwarded    Float     @default(0.0)
+  answeredAt      DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  attempt  ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question?   @relation(fields: [questionId], references: [id], onDelete: SetNull)
+
+  @@index([attemptId])
+}
+
+model Result {
+  id               String   @id @default(uuid())
+  attemptId        String   @unique
+  studentId        String
+  examId           String
+  rawMarks         Float
+  maximumMarks     Float
+  percentage       Float
+  grade            String // e.g. "OP", "Outstanding", "Pass", "Fail"
+  performanceLabel String // e.g. "Outstandingly Perfect", "Pass"
+  passed           Boolean
+  correctCount     Int      @default(0)
+  wrongCount       Int      @default(0)
+  unansweredCount  Int      @default(0)
+  isOfficial       Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  attempt ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  student Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam    Exam        @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([examId])
+  @@index([isOfficial])
+}
+
+model RetakeRequest {
+  id            String       @id @default(uuid())
+  examId        String
+  studentId     String
+  attemptId     String?
+  reason        String
+  status        RetakeStatus @default(PENDING)
+  requestedAt   DateTime     @default(now())
+  reviewedAt    DateTime?
+  reviewedBy    String? // Admin user ID
+  reviewComment String?
+
+  exam     Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  reviewer User?    @relation("RetakeReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([examId, studentId])
+  @@index([status])
+}
+
+model AttendanceSession {
+  id                   String   @id @default(uuid())
+  classId              String
+  academicSessionId    String
+  date                 DateTime
+  startTime            DateTime
+  endTime              DateTime
+  studentCheckInEnabled Boolean  @default(false)
+  title                String? // e.g. "Morning Physics Class"
+  createdBy            String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  class           Class              @relation(fields: [classId], references: [id], onDelete: Cascade)
+  academicSession AcademicSession    @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  creator         User?              @relation("AttendanceCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  records         AttendanceRecord[]
+
+  @@index([classId, date])
+}
+
+model AttendanceRecord {
+  id        String           @id @default(uuid())
+  sessionId String
+  studentId String
+  status    AttendanceStatus @default(PRESENT)
+  markedAt  DateTime         @default(now())
+  method    AttendanceMethod @default(TEACHER)
+  markedBy  String? // User ID or studentId
+  remarks   String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@index([studentId])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  actorRole  String? // ADMIN | TEACHER | STUDENT
+  action     String // e.g. "STUDENT_PROMOTED", "EXAM_ASSIGNED", "RETAKE_APPROVED"
+  entityType String // "Student", "Exam", "Result", "Attendance"
+  entityId   String?
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique // e.g. "LEADERBOARD_ENABLED", "DEFAULT_PASSING_PERCENTAGE"
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model TeacherRemark {
+  id                String   @id @default(uuid())
+  studentId         String
+  academicSessionId String
+  remark            String
+  authorId          String? // Admin / Teacher User ID
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  student         Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  academicSession AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Restrict)
+  author          User?           @relation("RemarkAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@unique([studentId, academicSessionId])
+  @@index([studentId])
+}

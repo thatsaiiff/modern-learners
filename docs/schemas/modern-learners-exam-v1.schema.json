@@ -1,0 +1,125 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Modern Learners Exam Format v1.0",
+  "type": "object",
+  "required": ["formatVersion", "exam", "questions"],
+  "properties": {
+    "formatVersion": {
+      "type": "string",
+      "enum": ["1.0"]
+    },
+    "exam": {
+      "type": "object",
+      "required": ["title", "class", "subject"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "class": { "type": "integer", "minimum": 1, "maximum": 12 },
+        "subject": { "type": "string", "minLength": 1 },
+        "chapter": { "type": "string" },
+        "description": { "type": "string" },
+        "instructions": { "type": "string" },
+        "totalMarks": { "type": "number", "minimum": 0 },
+        "durationMinutes": { "type": "integer", "minimum": 1 },
+        "passingPercentage": { "type": "number", "minimum": 0, "maximum": 100 },
+        "negativeMarking": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "wrongAnswerMarks": { "type": "number", "minimum": 0 }
+          }
+        },
+        "grading": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["min", "max", "label"],
+            "properties": {
+              "min": { "type": "number", "minimum": 0, "maximum": 100 },
+              "max": { "type": "number", "minimum": 0, "maximum": 100 },
+              "label": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "randomization": {
+          "type": "object",
+          "properties": {
+            "questions": { "type": "boolean" },
+            "options": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "marks", "question"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "type": {
+            "type": "string",
+            "enum": ["mcq", "true_false", "multiple_correct", "numerical", "short_answer", "long_answer", "image_based"]
+          },
+          "topic": { "type": "string" },
+          "difficulty": {
+            "type": "string",
+            "enum": ["easy", "medium", "hard"]
+          },
+          "marks": { "type": "number", "minimum": 0.5 },
+          "question": {
+            "type": "object",
+            "required": ["text"],
+            "properties": {
+              "text": { "type": "string", "minLength": 1 },
+              "image": {
+                "type": "object",
+                "required": ["src"],
+                "properties": {
+                  "src": { "type": "string" },
+                  "alt": { "type": "string" },
+                  "width": { "type": "integer" }
+                }
+              }
+            }
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "text", "correct"],
+              "properties": {
+                "id": { "type": "string" },
+                "text": { "type": "string" },
+                "correct": { "type": "boolean" }
+              }
+            }
+          },
+          "answer": {
+            "oneOf": [
+              { "type": "boolean" },
+              { "type": "number" },
+              {
+                "type": "object",
+                "required": ["value"],
+                "properties": {
+                  "value": { "type": "number" },
+                  "unit": { "type": "string" },
+                  "tolerance": { "type": "number", "minimum": 0 }
+                }
+              }
+            ]
+          },
+          "explanation": { "type": "string" },
+          "evaluation": {
+            "type": "object",
+            "properties": {
+              "mode": { "type": "string" },
+              "rubric": { "type": "object" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
