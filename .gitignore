@@ -46,5 +46,8 @@ Thumbs.db
 *.swp
 *.swo
 
-# Vercel Deployment Temp
+# Vercel & Neon Tooling
 .vercel
+.neon
+.agents/
+skills-lock.json
