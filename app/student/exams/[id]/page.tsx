@@ -383,49 +383,28 @@ export default function StudentExamRoomPage() {
   ).length;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4 pb-20 sm:pb-6">
-      {/* Sticky Top Bar for Exam Progress & Authoritative Timer */}
-      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200 p-3.5 sm:p-4 shadow-sm flex items-center justify-between gap-2">
-        <div className="flex items-center space-x-2.5">
-          <div className="h-8 w-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs">
-            {currentIndex + 1}
-          </div>
-          <div>
-            <h3 className="font-bold text-xs sm:text-sm text-slate-900 line-clamp-1 leading-tight">
-              {attemptData.examTitle}
-            </h3>
-            <span className="text-[11px] text-slate-500 font-medium">
-              Question {currentIndex + 1} of {attemptData.totalQuestions}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-3">
-          {/* Autosave Status Pill */}
-          <div className="hidden sm:flex items-center text-[11px] font-medium">
-            {saveStatus === "saving" && (
-              <span className="text-amber-600 flex items-center">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping mr-1.5" />
-                Saving...
+    <div className="max-w-4xl mx-auto space-y-4 pb-24 sm:pb-8">
+      {/* Multi-Tier Responsive Mobile Command Header */}
+      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-sm space-y-2.5">
+        {/* Tier 1: Exam Title + Authoritative Timer */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+            <div className="h-8 w-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+              {currentIndex + 1}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-extrabold text-xs sm:text-sm text-slate-900 truncate leading-tight">
+                {attemptData.examTitle}
+              </h3>
+              <span className="text-[10px] text-indigo-600 font-semibold uppercase tracking-wider block sm:inline">
+                {attemptData.subjectName} • Class {attemptData.className}
               </span>
-            )}
-            {saveStatus === "saved" && (
-              <span className="text-emerald-600 flex items-center">
-                <Check className="h-3.5 w-3.5 mr-1" />
-                Saved
-              </span>
-            )}
-            {saveStatus === "offline" && (
-              <span className="text-rose-600 flex items-center">
-                <WifiOff className="h-3.5 w-3.5 mr-1" />
-                Offline
-              </span>
-            )}
+            </div>
           </div>
 
           {/* Authoritative Countdown Timer */}
           <div
-            className={`flex items-center font-mono font-bold text-sm sm:text-base px-3 py-1.5 rounded-xl border ${
+            className={`flex items-center font-mono font-bold text-xs sm:text-sm px-3 py-1.5 rounded-xl border shrink-0 tabular-nums ${
               remainingTime <= 60
                 ? "bg-rose-50 border-rose-300 text-rose-700 animate-pulse"
                 : remainingTime <= 300
@@ -433,19 +412,60 @@ export default function StudentExamRoomPage() {
                 : "bg-slate-100 border-slate-200 text-slate-900"
             }`}
           >
-            <Clock className="h-4 w-4 mr-1.5 shrink-0" />
+            <Clock className="h-3.5 w-3.5 mr-1.5 shrink-0" />
             <span>{formatTime(remainingTime)}</span>
           </div>
+        </div>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setIsPaletteOpen(true)}
-            className="space-x-1"
-          >
-            <Layers className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Palette</span>
-          </Button>
+        {/* Tier 2: Progress Indicator + Autosave Status + Question Palette Button */}
+        <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
+          <div className="flex items-center space-x-2">
+            <span className="font-bold text-slate-700 text-[11px] tabular-nums">
+              Q{currentIndex + 1} of {attemptData.totalQuestions}
+            </span>
+            <div className="w-16 xs:w-24 sm:w-36 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-600 rounded-full transition-all duration-300"
+                style={{
+                  width: `${((currentIndex + 1) / attemptData.totalQuestions) * 100}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            {/* Autosave Pill */}
+            <div className="flex items-center text-[11px] font-medium">
+              {saveStatus === "saving" && (
+                <span className="text-amber-600 flex items-center">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping mr-1.5" />
+                  Saving...
+                </span>
+              )}
+              {saveStatus === "saved" && (
+                <span className="text-emerald-700 flex items-center font-bold">
+                  <Check className="h-3.5 w-3.5 mr-1" />
+                  Saved
+                </span>
+              )}
+              {saveStatus === "offline" && (
+                <span className="text-rose-600 flex items-center font-bold">
+                  <WifiOff className="h-3.5 w-3.5 mr-1" />
+                  Offline
+                </span>
+              )}
+            </div>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsPaletteOpen(true)}
+              className="space-x-1 text-[11px] h-8 px-2.5"
+            >
+              <Layers className="h-3 w-3" />
+              <span>Palette</span>
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -485,7 +505,7 @@ export default function StudentExamRoomPage() {
           {/* Interactive Option Selectors by Question Type */}
           {/* 1. MCQ & Multiple Correct */}
           {(currentQ.type === "mcq" || currentQ.type === "multiple_correct") && currentQ.options && (
-            <div className="space-y-2.5 pt-2">
+            <div className="space-y-3 pt-2">
               {currentQ.options.map((opt) => {
                 const isSelected = currentAnswer?.selectedOptions?.includes(opt.id);
                 return (
@@ -495,26 +515,26 @@ export default function StudentExamRoomPage() {
                     onClick={() =>
                       handleSelectOption(currentQ.questionKey, opt.id, currentQ.type === "multiple_correct")
                     }
-                    className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-center justify-between ${
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-center justify-between min-h-[52px] ${
                       isSelected
-                        ? "bg-indigo-50/80 border-indigo-600 text-indigo-950 font-semibold shadow-xs"
+                        ? "bg-indigo-50 border-indigo-600 text-indigo-950 font-semibold shadow-xs"
                         : "bg-white border-slate-200 hover:border-slate-300 text-slate-800"
                     }`}
                   >
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-3.5">
                       <div
-                        className={`h-7 w-7 rounded-lg flex items-center justify-center font-bold text-xs ${
+                        className={`h-8 w-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
                           isSelected
-                            ? "bg-indigo-600 text-white"
-                            : "bg-slate-100 text-slate-600"
+                            ? "bg-indigo-600 text-white shadow-xs"
+                            : "bg-slate-100 text-slate-700"
                         }`}
                       >
                         {opt.id}
                       </div>
-                      <span className="text-sm">{opt.text}</span>
+                      <span className="text-sm sm:text-base leading-snug">{opt.text}</span>
                     </div>
 
-                    {isSelected && <Check className="h-5 w-5 text-indigo-600" />}
+                    {isSelected && <Check className="h-5 w-5 text-indigo-600 shrink-0 ml-2" />}
                   </button>
                 );
               })}
@@ -527,7 +547,7 @@ export default function StudentExamRoomPage() {
               <button
                 type="button"
                 onClick={() => handleTrueFalseSelect(currentQ.questionKey, true)}
-                className={`p-5 rounded-xl border-2 text-center font-bold text-base transition-all ${
+                className={`p-5 min-h-[56px] rounded-2xl border-2 text-center font-extrabold text-base sm:text-lg transition-all ${
                   currentAnswer?.selectedOptions?.includes("true")
                     ? "bg-emerald-50 border-emerald-600 text-emerald-950 shadow-xs"
                     : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
@@ -538,7 +558,7 @@ export default function StudentExamRoomPage() {
               <button
                 type="button"
                 onClick={() => handleTrueFalseSelect(currentQ.questionKey, false)}
-                className={`p-5 rounded-xl border-2 text-center font-bold text-base transition-all ${
+                className={`p-5 min-h-[56px] rounded-2xl border-2 text-center font-extrabold text-base sm:text-lg transition-all ${
                   currentAnswer?.selectedOptions?.includes("false")
                     ? "bg-rose-50 border-rose-600 text-rose-950 shadow-xs"
                     : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
@@ -552,7 +572,7 @@ export default function StudentExamRoomPage() {
           {/* 3. Numerical Answer */}
           {currentQ.type === "numerical" && (
             <div className="space-y-2 pt-2">
-              <label className="block text-xs font-semibold text-slate-700">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                 Enter Numerical Answer Value:
               </label>
               <input
@@ -561,7 +581,7 @@ export default function StudentExamRoomPage() {
                 placeholder="e.g. 50"
                 value={currentAnswer?.numericAnswer !== undefined ? currentAnswer.numericAnswer : ""}
                 onChange={(e) => handleNumericalChange(currentQ.questionKey, e.target.value)}
-                className="h-12 w-full max-w-xs rounded-xl border border-slate-300 bg-white px-4 font-mono text-base text-slate-900 focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className="h-13 min-h-[52px] w-full max-w-sm rounded-xl border border-slate-300 bg-white px-4 font-mono text-lg text-slate-900 focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 tabular-nums"
               />
             </div>
           )}

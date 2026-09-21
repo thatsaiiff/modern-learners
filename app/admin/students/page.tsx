@@ -175,121 +175,182 @@ export default function StudentsManagementPage() {
         </CardContent>
       </Card>
 
-      {/* Students Table */}
+      {/* Students List — Hybrid Desktop Table & Mobile Touch Cards */}
       <Card>
-        <CardHeader className="p-4 border-b border-slate-100 flex flex-row items-center justify-between">
+        <CardHeader className="p-4 sm:p-5 border-b border-slate-100 flex flex-row items-center justify-between">
           <CardTitle className="text-sm font-bold text-slate-800">
-            Total Students: {pagination.total}
+            Total Students: <span className="tabular-nums">{pagination.total}</span>
           </CardTitle>
           {pagination.total > 0 && (
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-400 tabular-nums font-medium">
               Page {pagination.page} of {pagination.totalPages}
             </span>
           )}
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs sm:text-sm text-slate-600">
-              <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                <tr>
-                  <th className="px-4 py-3.5">Student ID</th>
-                  <th className="px-4 py-3.5">Student Name</th>
-                  <th className="px-4 py-3.5">Roll Number</th>
-                  <th className="px-4 py-3.5">Class</th>
-                  <th className="px-4 py-3.5">Session</th>
-                  <th className="px-4 py-3.5">Status</th>
-                  <th className="px-4 py-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={7} className="text-center py-10 text-slate-400 text-xs">
-                      Loading students list...
-                    </td>
-                  </tr>
-                ) : students.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="text-center py-12 text-slate-500">
-                      <Users className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-                      <p className="font-semibold text-sm text-slate-700">No students found</p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Add your first student to begin managing tuition classes.
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  students.map((student) => (
-                    <tr key={student.id} className="hover:bg-slate-50/70 transition">
-                      <td className="px-4 py-3.5 font-mono text-xs font-semibold text-indigo-700">
-                        {student.studentCode}
-                      </td>
-                      <td className="px-4 py-3.5 font-bold text-slate-900">
-                        {student.name}
-                      </td>
-                      <td className="px-4 py-3.5 font-mono text-xs font-medium text-slate-700">
-                        {student.rollNumber}
-                      </td>
-                      <td className="px-4 py-3.5 font-medium text-slate-800">
-                        {student.className}
-                      </td>
-                      <td className="px-4 py-3.5 text-xs text-slate-500">
-                        {student.sessionName}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        {student.status === "ACTIVE" ? (
-                          <Badge variant="success">Active</Badge>
-                        ) : (
-                          <Badge variant="danger">Inactive</Badge>
-                        )}
-                      </td>
-                      <td className="px-4 py-3.5 text-right space-x-1">
-                        <Link href={`/admin/students/${student.id}`}>
-                          <button
-                            title="View Full Profile & History"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                        </Link>
-                        <button
-                          onClick={() => setEditStudent(student)}
-                          title="Edit Student Name"
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() =>
-                            setResetPinStudent({ id: student.id, name: student.name })
-                          }
-                          title="Reset PIN"
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition"
-                        >
-                          <KeyRound className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => toggleStudentStatus(student)}
-                          title={
-                            student.status === "ACTIVE"
-                              ? "Deactivate Student"
-                              : "Reactivate Student"
-                          }
-                          className={`p-1.5 rounded-lg transition ${
-                            student.status === "ACTIVE"
-                              ? "text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                              : "text-emerald-600 hover:bg-emerald-50"
-                          }`}
-                        >
-                          <ShieldAlert className="h-4 w-4" />
-                        </button>
-                      </td>
+          {isLoading ? (
+            <div className="text-center py-12 text-slate-400 text-xs">
+              <div className="h-8 w-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              Loading students list...
+            </div>
+          ) : students.length === 0 ? (
+            <div className="text-center py-12 text-slate-500">
+              <Users className="h-8 w-8 mx-auto text-slate-300 mb-2" />
+              <p className="font-bold text-sm text-slate-700">No students found</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Add your first student to begin managing tuition classes.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Mobile Touch Cards (< md) */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {students.map((student) => (
+                  <div key={student.id} className="p-4 space-y-3 hover:bg-slate-50/70 transition">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-0.5 min-w-0 flex-1">
+                        <div className="flex items-center space-x-2">
+                          <h4 className="font-bold text-sm text-slate-900 truncate">{student.name}</h4>
+                          {student.status === "ACTIVE" ? (
+                            <Badge variant="success">Active</Badge>
+                          ) : (
+                            <Badge variant="danger">Inactive</Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 font-mono tabular-nums">
+                          ID: <span className="text-indigo-600 font-bold">{student.studentCode}</span> • Roll: {student.rollNumber}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          {student.className} • Session {student.sessionName}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons with 44px min touch targets */}
+                    <div className="flex items-center justify-end space-x-1.5 pt-1 border-t border-slate-100">
+                      <Link href={`/admin/students/${student.id}`}>
+                        <Button size="sm" variant="outline" className="h-9 px-3 text-xs space-x-1">
+                          <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                          <span>Profile</span>
+                        </Button>
+                      </Link>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditStudent(student)}
+                        className="h-9 px-3 text-xs space-x-1"
+                      >
+                        <Pencil className="h-3.5 w-3.5 text-indigo-600" />
+                        <span>Edit</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setResetPinStudent({ id: student.id, name: student.name })}
+                        className="h-9 px-2.5 text-xs text-amber-700"
+                        title="Reset PIN"
+                      >
+                        <KeyRound className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => toggleStudentStatus(student)}
+                        className={`h-9 px-2.5 text-xs ${
+                          student.status === "ACTIVE"
+                            ? "text-rose-600 hover:bg-rose-50"
+                            : "text-emerald-700 hover:bg-emerald-50"
+                        }`}
+                        title={student.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                      >
+                        <ShieldAlert className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table View (>= md) */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-xs sm:text-sm text-slate-600">
+                  <thead className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3.5">Student ID</th>
+                      <th className="px-4 py-3.5">Student Name</th>
+                      <th className="px-4 py-3.5">Roll Number</th>
+                      <th className="px-4 py-3.5">Class</th>
+                      <th className="px-4 py-3.5">Session</th>
+                      <th className="px-4 py-3.5">Status</th>
+                      <th className="px-4 py-3.5 text-right">Actions</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {students.map((student) => (
+                      <tr key={student.id} className="hover:bg-slate-50/70 transition">
+                        <td className="px-4 py-3.5 font-mono text-xs font-bold text-indigo-700 tabular-nums">
+                          {student.studentCode}
+                        </td>
+                        <td className="px-4 py-3.5 font-bold text-slate-900">{student.name}</td>
+                        <td className="px-4 py-3.5 font-mono text-xs font-medium text-slate-700 tabular-nums">
+                          {student.rollNumber}
+                        </td>
+                        <td className="px-4 py-3.5 font-medium text-slate-800">{student.className}</td>
+                        <td className="px-4 py-3.5 text-xs text-slate-500">{student.sessionName}</td>
+                        <td className="px-4 py-3.5">
+                          {student.status === "ACTIVE" ? (
+                            <Badge variant="success">Active</Badge>
+                          ) : (
+                            <Badge variant="danger">Inactive</Badge>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 text-right space-x-1">
+                          <Link href={`/admin/students/${student.id}`}>
+                            <button
+                              title="View Full Profile & History"
+                              className="p-2 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition min-h-[36px] min-w-[36px]"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                          </Link>
+                          <button
+                            onClick={() => setEditStudent(student)}
+                            title="Edit Student Name"
+                            className="p-2 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition min-h-[36px] min-w-[36px]"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() =>
+                              setResetPinStudent({ id: student.id, name: student.name })
+                            }
+                            title="Reset PIN"
+                            className="p-2 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition min-h-[36px] min-w-[36px]"
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => toggleStudentStatus(student)}
+                            title={
+                              student.status === "ACTIVE"
+                                ? "Deactivate Student"
+                                : "Reactivate Student"
+                            }
+                            className={`p-2 rounded-lg transition min-h-[36px] min-w-[36px] ${
+                              student.status === "ACTIVE"
+                                ? "text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                                : "text-emerald-600 hover:bg-emerald-50"
+                            }`}
+                          >
+                            <ShieldAlert className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
 
           {/* Pagination Controls */}
           {pagination.totalPages > 1 && (

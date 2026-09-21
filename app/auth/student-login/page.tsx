@@ -66,19 +66,19 @@ export default function StudentLoginPage() {
           Back to Home
         </Link>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+        <div className="rounded-2xl sm:rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-elevated">
           <div className="text-center mb-6">
-            <div className="h-12 w-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-md shadow-indigo-100 mx-auto mb-3">
+            <div className="h-12 w-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-md shadow-indigo-600/20 mx-auto mb-3">
               <GraduationCap className="h-7 w-7" />
             </div>
-            <h1 className="text-xl font-bold text-slate-900">Student Portal</h1>
+            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Student Portal</h1>
             <p className="text-xs text-slate-500 mt-1">
-              Enter your Roll Number and 4-digit PIN to access exams
+              Enter your Academic Roll Number and 4-digit PIN to access exams
             </p>
           </div>
 
           {error && (
-            <div className="mb-5 rounded-lg bg-rose-50 border border-rose-200 p-3.5 flex items-start space-x-2.5 text-xs text-rose-700">
+            <div className="mb-5 rounded-xl bg-rose-50 border border-rose-200 p-3.5 flex items-start space-x-2.5 text-xs text-rose-700 font-medium">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -111,19 +111,19 @@ export default function StudentLoginPage() {
                 autoComplete="current-password"
                 required
               />
-              <p className="text-[11px] text-slate-400 mt-1 flex items-center">
-                <KeyRound className="h-3 w-3 mr-1 inline" />
+              <p className="text-[11px] text-slate-400 mt-1.5 flex items-center font-medium">
+                <KeyRound className="h-3 w-3 mr-1 inline shrink-0" />
                 Contact Saif Sir if you forgot your 4-digit PIN
               </p>
             </div>
 
             <Button
               type="submit"
-              className="w-full mt-2"
+              className="w-full mt-2 h-12 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/20"
               isLoading={isLoading}
               disabled={isLoading || !rollNumber || pin.length !== 4}
             >
-              {isLoading ? "Verifying..." : "Login to Student Portal"}
+              {isLoading ? "Verifying Credentials..." : "Login to Student Portal"}
             </Button>
           </form>
         </div>

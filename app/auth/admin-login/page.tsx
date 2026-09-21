@@ -58,19 +58,19 @@ export default function AdminLoginPage() {
           Back to Home
         </Link>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+        <div className="rounded-2xl sm:rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-elevated">
           <div className="text-center mb-6">
-            <div className="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold shadow-md shadow-slate-200 mx-auto mb-3">
+            <div className="h-12 w-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-bold shadow-md shadow-slate-900/20 mx-auto mb-3">
               <ShieldCheck className="h-7 w-7" />
             </div>
-            <h1 className="text-xl font-bold text-slate-900">Admin & Teacher Login</h1>
+            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Admin & Faculty Login</h1>
             <p className="text-xs text-slate-500 mt-1">
               Saif Classes staff & administrative access
             </p>
           </div>
 
           {error && (
-            <div className="mb-5 rounded-lg bg-rose-50 border border-rose-200 p-3.5 flex items-start space-x-2.5 text-xs text-rose-700">
+            <div className="mb-5 rounded-xl bg-rose-50 border border-rose-200 p-3.5 flex items-start space-x-2.5 text-xs text-rose-700 font-medium">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -100,8 +100,8 @@ export default function AdminLoginPage() {
 
             <Button
               type="submit"
-              variant="primary"
-              className="w-full mt-2 bg-slate-900 hover:bg-slate-800"
+              variant="secondary"
+              className="w-full mt-2 h-12 text-sm font-bold bg-slate-900 text-white hover:bg-slate-800 shadow-md shadow-slate-900/20"
               isLoading={isLoading}
               disabled={isLoading || !identifier || !password}
             >

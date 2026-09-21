@@ -33,24 +33,34 @@ export function Modal({ isOpen, onClose, title, description, children, className
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
-      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
       <div
+        className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
         className={cn(
-          "relative z-50 w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto",
+          "relative z-50 w-full max-w-lg rounded-2xl bg-white p-5 sm:p-6 shadow-2xl border border-slate-200/80 max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150",
           className
         )}
       >
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-          aria-label="Close dialog"
-        >
-          <X className="h-5 w-5" />
-        </button>
-        {title && <h3 className="text-lg font-bold text-slate-900 mb-1">{title}</h3>}
-        {description && <p className="text-sm text-slate-500 mb-4">{description}</p>}
-        {children}
+        <div className="flex items-start justify-between pb-3 border-b border-slate-100 shrink-0">
+          <div className="pr-6">
+            {title && <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-snug">{title}</h3>}
+            {description && <p className="text-xs text-slate-500 mt-0.5 leading-normal">{description}</p>}
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label="Close dialog"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="overflow-y-auto py-4 flex-1 pr-1">{children}</div>
       </div>
     </div>
   );

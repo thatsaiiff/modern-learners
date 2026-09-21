@@ -155,79 +155,124 @@ export default function AdminResultsPage() {
           )}
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs sm:text-sm text-slate-600">
-              <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                <tr>
-                  <th className="px-4 py-3.5">Student</th>
-                  <th className="px-4 py-3.5">Roll No</th>
-                  <th className="px-4 py-3.5">Exam</th>
-                  <th className="px-4 py-3.5">Score</th>
-                  <th className="px-4 py-3.5">Percentage</th>
-                  <th className="px-4 py-3.5">Grade</th>
-                  <th className="px-4 py-3.5">Outcome</th>
-                  <th className="px-4 py-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-10 text-slate-400 text-xs">
-                      Loading results...
-                    </td>
-                  </tr>
-                ) : results.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-12 text-slate-500">
-                      <BookOpen className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-                      <p className="font-semibold text-sm text-slate-700">No results found</p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Completed exam attempts will automatically appear here.
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  results.map((r) => (
-                    <tr key={r.id} className="hover:bg-slate-50/70 transition">
-                      <td className="px-4 py-3.5">
-                        <span className="font-bold text-slate-900 block">{r.studentName}</span>
-                        <span className="font-mono text-[11px] text-indigo-600">{r.studentCode}</span>
-                      </td>
-                      <td className="px-4 py-3.5 font-mono text-xs font-medium text-slate-700">
-                        {r.rollNumber}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <span className="font-medium text-slate-900 block">{r.examTitle}</span>
-                        <span className="text-[11px] text-slate-400">
-                          {r.className} • {r.subjectName} • Att #{r.attemptNumber}
+          {isLoading ? (
+            <div className="text-center py-12 text-slate-400 text-xs">
+              <div className="h-8 w-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              Loading results...
+            </div>
+          ) : results.length === 0 ? (
+            <div className="text-center py-12 text-slate-500">
+              <BookOpen className="h-8 w-8 mx-auto text-slate-300 mb-2" />
+              <p className="font-bold text-sm text-slate-700">No results found</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Completed exam attempts will automatically appear here.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Mobile Result Cards (< md) */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {results.map((r) => (
+                  <div key={r.id} className="p-4 space-y-2.5 hover:bg-slate-50/70 transition">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center space-x-2">
+                          <h4 className="font-bold text-sm text-slate-900 truncate">{r.studentName}</h4>
+                          <Badge variant={r.passed ? "success" : "danger"}>
+                            {r.passed ? "Pass" : "Fail"}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-slate-500 font-mono tabular-nums">
+                          Roll: {r.rollNumber} • ID: <span className="text-indigo-600 font-bold">{r.studentCode}</span>
+                        </p>
+                        <p className="text-[11px] text-slate-700 font-medium">
+                          {r.examTitle} ({r.className} • {r.subjectName})
+                        </p>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="font-black text-sm text-slate-900 block tabular-nums">
+                          {r.rawMarks}/{r.maximumMarks}
                         </span>
-                      </td>
-                      <td className="px-4 py-3.5 font-black text-slate-900">
-                        {r.rawMarks} / {r.maximumMarks}
-                      </td>
-                      <td className="px-4 py-3.5 font-bold text-indigo-700">{r.percentage}%</td>
-                      <td className="px-4 py-3.5 font-semibold text-slate-800">{r.grade}</td>
-                      <td className="px-4 py-3.5">
-                        <Badge variant={r.passed ? "success" : "danger"}>
-                          {r.passed ? "Pass" : "Fail"}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3.5 text-right">
-                        <Link href={`/admin/results/${r.id}`}>
-                          <button
-                            title="View Result Details & Review"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                        </Link>
-                      </td>
+                        <span className="text-[11px] font-bold text-indigo-700 block tabular-nums">
+                          {r.percentage}% • {r.grade}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(r.submittedAt).toLocaleDateString()} • Att #{r.attemptNumber}
+                      </span>
+                      <Link href={`/admin/results/${r.id}`}>
+                        <Button size="sm" variant="outline" className="h-9 px-3 text-xs space-x-1">
+                          <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                          <span>View Review</span>
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table View (>= md) */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-xs sm:text-sm text-slate-600">
+                  <thead className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3.5">Student</th>
+                      <th className="px-4 py-3.5">Roll No</th>
+                      <th className="px-4 py-3.5">Exam</th>
+                      <th className="px-4 py-3.5">Score</th>
+                      <th className="px-4 py-3.5">Percentage</th>
+                      <th className="px-4 py-3.5">Grade</th>
+                      <th className="px-4 py-3.5">Outcome</th>
+                      <th className="px-4 py-3.5 text-right">Actions</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {results.map((r) => (
+                      <tr key={r.id} className="hover:bg-slate-50/70 transition">
+                        <td className="px-4 py-3.5">
+                          <span className="font-bold text-slate-900 block">{r.studentName}</span>
+                          <span className="font-mono text-[11px] text-indigo-600">{r.studentCode}</span>
+                        </td>
+                        <td className="px-4 py-3.5 font-mono text-xs font-medium text-slate-700 tabular-nums">
+                          {r.rollNumber}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className="font-medium text-slate-900 block">{r.examTitle}</span>
+                          <span className="text-[11px] text-slate-400">
+                            {r.className} • {r.subjectName} • Att #{r.attemptNumber}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 font-black text-slate-900 tabular-nums">
+                          {r.rawMarks} / {r.maximumMarks}
+                        </td>
+                        <td className="px-4 py-3.5 font-bold text-indigo-700 tabular-nums">{r.percentage}%</td>
+                        <td className="px-4 py-3.5 font-semibold text-slate-800">{r.grade}</td>
+                        <td className="px-4 py-3.5">
+                          <Badge variant={r.passed ? "success" : "danger"}>
+                            {r.passed ? "Pass" : "Fail"}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3.5 text-right">
+                          <Link href={`/admin/results/${r.id}`}>
+                            <button
+                              title="View Result Details & Review"
+                              className="p-2 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition min-h-[36px] min-w-[36px]"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (
