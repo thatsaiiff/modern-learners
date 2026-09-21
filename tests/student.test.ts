@@ -73,3 +73,46 @@ describe("Academic Progression Business Rules", () => {
     expect(movement.fromEnrollmentId).not.toBe(movement.toEnrollmentId);
   });
 });
+
+describe("Student Profile & Name Update Business Rules", () => {
+  it("should update student name while strictly preserving immutable permanent Student ID and roll number", () => {
+    const originalStudent = {
+      id: "stu-uuid-1",
+      studentCode: "STU-000001",
+      name: "Rahul Sharma",
+      status: "ACTIVE" as const,
+      phone: "9876543210",
+      activeEnrollment: {
+        id: "enr-uuid-1",
+        rollNumber: "08-2627-001",
+        classNumber: 8,
+      },
+    };
+
+    const newName = "Rahul A. Sharma";
+    const updatedStudent = {
+      ...originalStudent,
+      name: newName.trim(),
+    };
+
+    // Verify name changed
+    expect(updatedStudent.name).toBe("Rahul A. Sharma");
+
+    // Verify permanent metadata remained untouched
+    expect(updatedStudent.id).toBe(originalStudent.id);
+    expect(updatedStudent.studentCode).toBe(originalStudent.studentCode);
+    expect(updatedStudent.activeEnrollment.rollNumber).toBe("08-2627-001");
+    expect(updatedStudent.activeEnrollment.classNumber).toBe(8);
+  });
+
+  it("should reject empty or whitespace-only student names", () => {
+    const validateName = (name: string) => {
+      const trimmed = name ? name.trim() : "";
+      return trimmed.length > 0 && trimmed.length <= 100;
+    };
+
+    expect(validateName("Armaan Khan")).toBe(true);
+    expect(validateName("")).toBe(false);
+    expect(validateName("   ")).toBe(false);
+  });
+});

@@ -8,6 +8,7 @@ import {
   Search,
   KeyRound,
   Eye,
+  Pencil,
   GraduationCap,
   ChevronLeft,
   ChevronRight,
@@ -18,6 +19,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AddStudentModal } from "@/components/admin/add-student-modal";
 import { ResetPinModal } from "@/components/admin/reset-pin-modal";
+import { EditStudentModal } from "@/components/admin/edit-student-modal";
 
 interface StudentItem {
   id: string;
@@ -45,6 +47,7 @@ export default function StudentsManagementPage() {
   // Modals
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [resetPinStudent, setResetPinStudent] = useState<{ id: string; name: string } | null>(null);
+  const [editStudent, setEditStudent] = useState<StudentItem | null>(null);
 
   const fetchStudents = useCallback(async (page = 1) => {
     try {
@@ -250,6 +253,13 @@ export default function StudentsManagementPage() {
                           </button>
                         </Link>
                         <button
+                          onClick={() => setEditStudent(student)}
+                          title="Edit Student Name"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
                           onClick={() =>
                             setResetPinStudent({ id: student.id, name: student.name })
                           }
@@ -317,6 +327,18 @@ export default function StudentsManagementPage() {
         isOpen={isAddOpen}
         onClose={() => setIsAddOpen(false)}
         onSuccess={() => fetchStudents(1)}
+      />
+
+      {/* Edit Student Modal */}
+      <EditStudentModal
+        isOpen={!!editStudent}
+        studentId={editStudent?.id || null}
+        currentName={editStudent?.name || ""}
+        studentCode={editStudent?.studentCode || ""}
+        rollNumber={editStudent?.rollNumber || ""}
+        currentPhone={editStudent?.phone}
+        onClose={() => setEditStudent(null)}
+        onSuccess={() => fetchStudents(pagination.page)}
       />
 
       {/* Reset PIN Modal */}

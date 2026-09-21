@@ -1,8 +1,8 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import React, { useState, useEffect, useCallback } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getStudentById } from "@/lib/services/student.service";
-import { getAdminSession } from "@/lib/auth/session";
-import { redirect } from "next/navigation";
 import {
   ArrowLeft,
   GraduationCap,
@@ -11,25 +11,103 @@ import {
   Award,
   Phone,
   CheckCircle2,
+  Pencil,
+  FileText,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { EditStudentModal } from "@/components/admin/edit-student-modal";
 
-export default async function StudentDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const admin = await getAdminSession();
-  if (!admin) {
-    redirect("/auth/admin-login");
+interface EnrollmentDetail {
+  id: string;
+  rollNumber: string;
+  status: string;
+  createdAt: string;
+  class: { name: string; classNumber: number };
+  academicSession: { name: string };
+}
+
+interface MovementDetail {
+  id: string;
+  movementType: string;
+  reason: string | null;
+  createdAt: string;
+}
+
+interface ResultDetail {
+  id: string;
+}
+
+interface StudentDetailData {
+  id: string;
+  studentCode: string;
+  name: string;
+  status: string;
+  phone: string | null;
+  dateOfBirth: string | null;
+  joinedAt: string;
+  activeEnrollment?: {
+    id: string;
+    rollNumber: string;
+    class?: { name: string };
+  };
+  enrollments: EnrollmentDetail[];
+  academicMovements: MovementDetail[];
+  results: ResultDetail[];
+}
+
+export default function StudentDetailPage() {
+  const params = useParams();
+  const id = params.id as string;
+
+  const [student, setStudent] = useState<StudentDetailData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+
+  const loadStudent = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch(`/api/students/${id}`);
+      const data = await res.json();
+      if (data.success) {
+        setStudent(data.student);
+      } else {
+        setErrorMsg(data.error || "Student not found.");
+      }
+    } catch {
+      setErrorMsg("Network error loading student details.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadStudent();
+  }, [loadStudent]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-3">
+        <div className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs font-semibold text-slate-500">Loading student profile...</p>
+      </div>
+    );
   }
 
-  const { id } = await params;
-  const student = await getStudentById(id);
-
-  if (!student) {
-    notFound();
+  if (errorMsg || !student) {
+    return (
+      <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-2xl border border-rose-200 text-center space-y-4">
+        <h3 className="font-bold text-base text-slate-900">Student Not Found</h3>
+        <p className="text-xs text-slate-500">{errorMsg}</p>
+        <Link href="/admin/students">
+          <Button size="sm" variant="outline">
+            Back to Students
+          </Button>
+        </Link>
+      </div>
+    );
   }
 
   return (
@@ -85,6 +163,20 @@ export default async function StudentDetailPage({
               {student.phone}
             </div>
           )}
+          <Link href={`/admin/students/${student.id}/report-card`}>
+            <Button size="sm" variant="outline" className="space-x-1 text-xs">
+              <FileText className="h-3.5 w-3.5 text-indigo-600" />
+              <span>Report Card</span>
+            </Button>
+          </Link>
+          <Button
+            size="sm"
+            onClick={() => setIsEditOpen(true)}
+            className="space-x-1.5 bg-indigo-600 hover:bg-indigo-700"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            <span>Edit Student</span>
+          </Button>
         </div>
       </div>
 
@@ -220,6 +312,20 @@ export default async function StudentDetailPage({
           </Card>
         </div>
       </div>
+
+      {/* Edit Student Modal */}
+      <EditStudentModal
+        isOpen={isEditOpen}
+        studentId={student.id}
+        currentName={student.name}
+        studentCode={student.studentCode}
+        rollNumber={student.activeEnrollment?.rollNumber || ""}
+        currentPhone={student.phone}
+        onClose={() => setIsEditOpen(false)}
+        onSuccess={(updatedName) => {
+          setStudent((prev) => (prev ? { ...prev, name: updatedName } : null));
+        }}
+      />
     </div>
   );
 }
