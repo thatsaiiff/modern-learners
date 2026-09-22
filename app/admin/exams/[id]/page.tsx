@@ -8,7 +8,9 @@ import {
   Clock,
   Award,
   Layers,
+  Users,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -218,7 +220,17 @@ export default async function ExamDetailPage({
                             ✓ Correct
                           </span>
                         )}
-                      </div>
+        <div className="flex items-center space-x-2">
+          <Link href={`/admin/exams/${exam.id}/assign`}>
+            <Button size="sm" className="space-x-1.5 bg-indigo-600 hover:bg-indigo-700">
+              <Users className="h-4 w-4" />
+              <span>
+                {exam._count.assignments > 0 ? `Manage Eligibility (${exam._count.assignments})` : "Assign Exam to Class"}
+              </span>
+            </Button>
+          </Link>
+        </div>
+      </div>
                     ))}
                   </div>
                 )}

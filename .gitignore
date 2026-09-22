@@ -28,6 +28,7 @@ pnpm-debug.log*
 # Database Dumps & SQLite / Temp Files
 *.dump
 *.sql
+!prisma/migrations/**/*.sql
 *.sqlite
 *.sqlite3
 *.db

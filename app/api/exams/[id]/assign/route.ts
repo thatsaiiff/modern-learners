@@ -7,8 +7,16 @@ import {
   getExamAssignments,
 } from "@/lib/services/exam-assignment.service";
 
+const studentEligibilitySchema = z.object({
+  studentId: z.string().min(1, "Student ID is required"),
+  isEligible: z.boolean(),
+  ineligibilityReason: z.string().optional().nullable(),
+});
+
 const assignSchema = z.object({
-  studentIds: z.array(z.string()).min(1, "At least one student must be selected"),
+  classNumber: z.number().int().min(1).max(12).optional(),
+  studentEligibility: z.array(studentEligibilitySchema).optional(),
+  studentIds: z.array(z.string()).optional(), // Legacy fallback
   allowedAttempts: z.number().int().positive().default(1),
   startAt: z.string().optional(),
   loginDeadline: z.string().optional(),
@@ -28,9 +36,12 @@ export async function GET(
     const { id } = await params;
     const { searchParams } = new URL(req.url);
     const mode = searchParams.get("mode");
+    const requestedClassNumber = searchParams.get("classNumber")
+      ? parseInt(searchParams.get("classNumber")!, 10)
+      : undefined;
 
     if (mode === "roster") {
-      const data = await getEligibleStudentsForExam(id);
+      const data = await getEligibleStudentsForExam(id, requestedClassNumber);
       return NextResponse.json({ success: true, ...data });
     }
 
@@ -78,7 +89,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: `Successfully assigned exam to ${result.assignedCount} student(s).`,
+      message: `Successfully assigned exam: ${result.eligibleCount} eligible, ${result.ineligibleCount} ineligible (${result.totalCount} total students).`,
       data: result,
     });
   } catch (error: unknown) {

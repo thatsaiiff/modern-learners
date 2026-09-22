@@ -395,14 +395,16 @@ model ExamQuestion {
 }
 
 model ExamAssignment {
-  id              String           @id @default(uuid())
-  examId          String
-  studentId       String
-  assignedAt      DateTime         @default(now())
-  status          AssignmentStatus @default(ASSIGNED)
-  allowedAttempts Int              @default(1)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id                  String           @id @default(uuid())
+  examId              String
+  studentId           String
+  assignedAt          DateTime         @default(now())
+  status              AssignmentStatus @default(ASSIGNED)
+  allowedAttempts     Int              @default(1)
+  isEligible          Boolean          @default(true)
+  ineligibilityReason String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   exam     Exam          @relation(fields: [examId], references: [id], onDelete: Cascade)
   student  Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)

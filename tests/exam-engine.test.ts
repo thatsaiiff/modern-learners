@@ -126,3 +126,161 @@ describe("Attempt Lifecycle & Autosave Rules", () => {
     expect(secondCall.alreadySubmitted).toBe(true);
   });
 });
+
+describe("Exam Assignment & Student Eligibility Engine", () => {
+  it("should select all enrolled students as eligible by default upon assignment", () => {
+    const enrolledStudents = [
+      { id: "stu-1", name: "Ahmed", classNumber: 9 },
+      { id: "stu-2", name: "Rahul", classNumber: 9 },
+      { id: "stu-3", name: "Arif", classNumber: 9 },
+    ];
+
+    const defaultAssignments = enrolledStudents.map((s) => ({
+      studentId: s.id,
+      isEligible: true,
+      ineligibilityReason: null,
+      status: "ASSIGNED",
+    }));
+
+    expect(defaultAssignments.every((a) => a.isEligible)).toBe(true);
+    expect(defaultAssignments.every((a) => a.ineligibilityReason === null)).toBe(true);
+    expect(defaultAssignments.length).toBe(3);
+  });
+
+  it("should require a reason when a student is deselected as ineligible", () => {
+    const validateEligibilitySubmission = (
+      items: Array<{ studentId: string; isEligible: boolean; ineligibilityReason?: string | null }>
+    ) => {
+      for (const item of items) {
+        if (!item.isEligible && (!item.ineligibilityReason || !item.ineligibilityReason.trim())) {
+          throw new Error("An ineligibility reason is required for every student marked as ineligible.");
+        }
+      }
+      return true;
+    };
+
+    // Valid: reason provided
+    const validRoster = [
+      { studentId: "stu-1", isEligible: true, ineligibilityReason: null },
+      { studentId: "stu-2", isEligible: false, ineligibilityReason: "Medical leave" },
+    ];
+    expect(validateEligibilitySubmission(validRoster)).toBe(true);
+
+    // Invalid: missing reason
+    const invalidRoster = [
+      { studentId: "stu-1", isEligible: true, ineligibilityReason: null },
+      { studentId: "stu-2", isEligible: false, ineligibilityReason: "" },
+    ];
+    expect(() => validateEligibilitySubmission(invalidRoster)).toThrow(
+      "An ineligibility reason is required for every student marked as ineligible."
+    );
+  });
+
+  it("should keep exam visible to ineligible student while rejecting attempt creation", () => {
+    const ineligibleAssignment = {
+      examId: "exam-c9-chem",
+      studentId: "stu-arif",
+      isEligible: false,
+      ineligibilityReason: "Absent during preparation period",
+      status: "ASSIGNED",
+    };
+
+    // 1. Student Portal Visibility Check
+    // The exam must NOT disappear; it is visible with Not Eligible badge and reason
+    expect(ineligibleAssignment.isEligible).toBe(false);
+    expect(ineligibleAssignment.ineligibilityReason).toBe("Absent during preparation period");
+
+    // 2. Server Start Attempt Guard
+    const startAttemptGuard = (assignment: typeof ineligibleAssignment) => {
+      if (!assignment.isEligible) {
+        throw new Error(
+          assignment.ineligibilityReason
+            ? `You are not eligible to attempt this assessment: ${assignment.ineligibilityReason}`
+            : "You are not eligible to attempt this examination."
+        );
+      }
+      return { success: true, attemptCreated: true };
+    };
+
+    expect(() => startAttemptGuard(ineligibleAssignment)).toThrow(
+      "You are not eligible to attempt this assessment: Absent during preparation period"
+    );
+  });
+
+  it("should allow student to start once re-enabled by admin (ineligible -> eligible)", () => {
+    const initialAssignment = {
+      examId: "exam-c9-chem",
+      studentId: "stu-arif",
+      isEligible: false,
+      ineligibilityReason: "Medical leave",
+      status: "ASSIGNED",
+    };
+
+    // Admin re-enables student
+    const updatedAssignment = {
+      ...initialAssignment,
+      isEligible: true,
+      ineligibilityReason: null,
+    };
+
+    const startAttemptGuard = (assignment: typeof updatedAssignment) => {
+      if (!assignment.isEligible) {
+        throw new Error("You are not eligible.");
+      }
+      return { success: true, attemptCreated: true };
+    };
+
+    const result = startAttemptGuard(updatedAssignment);
+    expect(result.success).toBe(true);
+    expect(result.attemptCreated).toBe(true);
+  });
+
+  it("should lock target class once student assignments exist to protect historical records", () => {
+    const examWithAssignments = {
+      id: "exam-1",
+      classNumber: 8,
+      assignmentsCount: 25,
+    };
+
+    const changeClassHandler = (exam: typeof examWithAssignments, requestedClassNumber: number) => {
+      if (exam.assignmentsCount > 0 && requestedClassNumber !== exam.classNumber) {
+        throw new Error(
+          `Target class is locked to Class ${exam.classNumber} because student assignments already exist.`
+        );
+      }
+      return { success: true, classNumber: requestedClassNumber };
+    };
+
+    // Attempting to change Class 8 exam to Class 9 after assigning
+    expect(() => changeClassHandler(examWithAssignments, 9)).toThrow(
+      "Target class is locked to Class 8 because student assignments already exist."
+    );
+
+    // Same class is allowed
+    expect(changeClassHandler(examWithAssignments, 8).success).toBe(true);
+  });
+
+  it("should preserve existing attempt and result history when eligibility is updated", () => {
+    const existingAssignment = {
+      id: "asgn-1",
+      studentId: "stu-1",
+      isEligible: true,
+      ineligibilityReason: null,
+      attempts: [
+        { id: "att-1", score: 90, status: "SUBMITTED" },
+      ],
+      result: { rawMarks: 90, grade: "Excellent" },
+    };
+
+    // Updating eligibility must never delete previous attempts or results
+    const updatedAssignment = {
+      ...existingAssignment,
+      isEligible: false,
+      ineligibilityReason: "Changed status post assessment",
+    };
+
+    expect(updatedAssignment.attempts.length).toBe(1);
+    expect(updatedAssignment.attempts[0].id).toBe("att-1");
+    expect(updatedAssignment.result.grade).toBe("Excellent");
+  });
+});

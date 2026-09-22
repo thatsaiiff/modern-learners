@@ -324,16 +324,37 @@ export default function StudentExamRoomPage() {
   }
 
   if (loadError) {
+    const isIneligible = loadError.toLowerCase().includes("not eligible");
+
     return (
-      <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-2xl border border-rose-200 shadow-sm text-center space-y-4">
-        <AlertCircle className="h-10 w-10 mx-auto text-rose-600" />
-        <h3 className="font-bold text-base text-slate-900">Cannot Access Exam</h3>
-        <p className="text-xs text-slate-600">{loadError}</p>
-        <Link href="/student">
-          <Button variant="outline" size="sm">
-            Return to Dashboard
-          </Button>
-        </Link>
+      <div className="max-w-lg mx-auto my-12 p-6 sm:p-8 bg-white rounded-2xl sm:rounded-3xl border border-slate-200 shadow-md text-center space-y-4 animate-in fade-in">
+        {isIneligible ? (
+          <div className="h-14 w-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto border border-amber-200">
+            <AlertCircle className="h-8 w-8" />
+          </div>
+        ) : (
+          <div className="h-14 w-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto border border-rose-200">
+            <AlertCircle className="h-8 w-8" />
+          </div>
+        )}
+        <div className="space-y-1">
+          <h3 className="font-extrabold text-lg text-slate-900">
+            {isIneligible ? "Not Eligible for Examination" : "Cannot Access Exam"}
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">{loadError}</p>
+        </div>
+        {isIneligible && (
+          <p className="text-[11px] text-slate-400">
+            If you believe this status is in error, please contact Saif Sir.
+          </p>
+        )}
+        <div className="pt-2">
+          <Link href="/student">
+            <Button variant="outline" size="sm" className="h-10 px-4">
+              Return to Student Dashboard
+            </Button>
+          </Link>
+        </div>
       </div>
     );
   }

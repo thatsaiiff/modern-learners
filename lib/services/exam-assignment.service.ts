@@ -2,23 +2,54 @@ import prisma from "@/lib/prisma";
 import { AssignmentStatus, ExamStatus, StudentStatus } from "@prisma/client";
 import { logAudit } from "./audit.service";
 
+export interface StudentEligibilityItem {
+  studentId: string;
+  isEligible: boolean;
+  ineligibilityReason?: string | null;
+}
+
 export interface AssignExamInput {
   examId: string;
-  studentIds: string[];
+  classNumber?: number;
+  studentEligibility?: StudentEligibilityItem[];
+  studentIds?: string[]; // Legacy fallback support
   allowedAttempts?: number;
   startAt?: string | Date;
   loginDeadline?: string | Date;
   durationMinutes?: number;
 }
 
-export async function getEligibleStudentsForExam(examId: string) {
+export async function getEligibleStudentsForExam(examId: string, requestedClassNumber?: number) {
   const exam = await prisma.exam.findUnique({
     where: { id: examId },
-    include: { class: true },
+    include: {
+      class: true,
+      subject: true,
+      assignments: {
+        include: {
+          attempts: true,
+        },
+      },
+    },
   });
 
   if (!exam) {
     throw new Error("Exam not found.");
+  }
+
+  // Check if assignments already exist (class locking rule)
+  const isClassLocked = exam.assignments.length > 0;
+  let targetClassId = exam.classId;
+  let targetClassNumber = exam.class.classNumber;
+
+  if (!isClassLocked && requestedClassNumber && requestedClassNumber !== exam.class.classNumber) {
+    const requestedClass = await prisma.class.findUnique({
+      where: { classNumber: requestedClassNumber },
+    });
+    if (requestedClass) {
+      targetClassId = requestedClass.id;
+      targetClassNumber = requestedClass.classNumber;
+    }
   }
 
   // Find active academic session
@@ -30,10 +61,10 @@ export async function getEligibleStudentsForExam(examId: string) {
     throw new Error("No active academic session found.");
   }
 
-  // Query active students in this class for the active session
+  // Query active students in this target class for the active session
   const enrollments = await prisma.studentEnrollment.findMany({
     where: {
-      classId: exam.classId,
+      classId: targetClassId,
       academicSessionId: activeSession.id,
       status: "ACTIVE",
       student: {
@@ -47,15 +78,26 @@ export async function getEligibleStudentsForExam(examId: string) {
     orderBy: { rollNumber: "asc" },
   });
 
-  // Check existing assignments
-  const existingAssignments = await prisma.examAssignment.findMany({
-    where: { examId },
-  });
-
-  const assignmentMap = new Map(existingAssignments.map((a) => [a.studentId, a]));
+  // Map existing assignments
+  const assignmentMap = new Map(exam.assignments.map((a) => [a.studentId, a]));
 
   return {
-    exam,
+    exam: {
+      id: exam.id,
+      title: exam.title,
+      subjectName: exam.subject.name,
+      classNumber: targetClassNumber,
+      className: `Class ${targetClassNumber}`,
+      durationMinutes: exam.durationMinutes,
+      totalMarks: exam.totalMarks,
+      passingPercentage: exam.passingPercentage,
+      startAt: exam.startAt,
+      loginDeadline: exam.loginDeadline,
+      allowedAttempts: exam.maxAttempts || 1,
+      isClassLocked,
+    },
+    targetClassNumber,
+    isClassLocked,
     students: enrollments.map((enr) => {
       const existing = assignmentMap.get(enr.studentId);
       return {
@@ -65,8 +107,11 @@ export async function getEligibleStudentsForExam(examId: string) {
         rollNumber: enr.rollNumber,
         className: enr.class.name,
         isAssigned: !!existing,
+        isEligible: existing ? existing.isEligible : true, // Default: every enrolled student is eligible
+        ineligibilityReason: existing ? existing.ineligibilityReason : null,
         assignmentStatus: existing?.status || null,
         assignmentId: existing?.id || null,
+        attemptsCount: existing?.attempts?.length || 0,
       };
     }),
   };
@@ -77,17 +122,23 @@ export async function assignExamToStudents(
   actor?: { userId: string; role: string } | null,
   ipAddress?: string | null
 ) {
-  const { examId, studentIds, allowedAttempts = 1, startAt, loginDeadline, durationMinutes } = input;
-
-  if (!studentIds || studentIds.length === 0) {
-    throw new Error("At least one student must be selected for assignment.");
-  }
+  const {
+    examId,
+    classNumber,
+    studentEligibility,
+    studentIds,
+    allowedAttempts = 1,
+    startAt,
+    loginDeadline,
+    durationMinutes,
+  } = input;
 
   const exam = await prisma.exam.findUnique({
     where: { id: examId },
     include: {
       class: true,
       examQuestions: true,
+      assignments: true,
     },
   });
 
@@ -99,25 +150,81 @@ export async function assignExamToStudents(
     throw new Error("Cannot assign an exam with 0 questions.");
   }
 
-  // Verify all target students are active
+  // 1. Target Class Resolution & Locking Validation
+  const hasExistingAssignments = exam.assignments.length > 0;
+  let targetClassId = exam.classId;
+
+  if (classNumber && classNumber !== exam.class.classNumber) {
+    if (hasExistingAssignments) {
+      throw new Error(
+        `Target class is locked to Class ${exam.class.classNumber} because student assignments already exist. Changing the target class of an active/assigned exam is prohibited to protect historical records.`
+      );
+    }
+
+    const newClass = await prisma.class.findUnique({
+      where: { classNumber },
+    });
+    if (!newClass) {
+      throw new Error(`Class ${classNumber} not found.`);
+    }
+    targetClassId = newClass.id;
+  }
+
+  // 2. Build Eligibility Roster
+  let normalizedEligibility: StudentEligibilityItem[] = [];
+
+  if (studentEligibility && Array.isArray(studentEligibility)) {
+    normalizedEligibility = studentEligibility;
+  } else if (studentIds && Array.isArray(studentIds)) {
+    // Legacy fallback: studentIds selected are eligible
+    normalizedEligibility = studentIds.map((id) => ({
+      studentId: id,
+      isEligible: true,
+      ineligibilityReason: null,
+    }));
+  }
+
+  if (normalizedEligibility.length === 0) {
+    throw new Error("Student eligibility roster cannot be empty.");
+  }
+
+  // 3. Validate that every ineligible student has a reason
+  for (const item of normalizedEligibility) {
+    if (!item.isEligible) {
+      if (!item.ineligibilityReason || !item.ineligibilityReason.trim()) {
+        throw new Error(
+          "An ineligibility reason is required for every student marked as ineligible."
+        );
+      }
+    }
+  }
+
+  // 4. Validate students are active
+  const targetStudentIds = normalizedEligibility.map((item) => item.studentId);
   const activeStudents = await prisma.student.findMany({
     where: {
-      id: { in: studentIds },
+      id: { in: targetStudentIds },
       status: StudentStatus.ACTIVE,
     },
   });
 
-  if (activeStudents.length === 0) {
-    throw new Error("None of the selected students are currently active.");
+  const activeStudentIdSet = new Set(activeStudents.map((s) => s.id));
+  const validEligibilityList = normalizedEligibility.filter((item) =>
+    activeStudentIdSet.has(item.studentId)
+  );
+
+  if (validEligibilityList.length === 0) {
+    throw new Error("None of the targeted students are currently active.");
   }
 
-  const validStudentIds = activeStudents.map((s) => s.id);
-
   return await prisma.$transaction(async (tx) => {
-    // 1. Optionally update exam timing or status if provided
+    // 5. Update Exam timing / status / classId
     const updateExamData: Record<string, unknown> = {};
     if (exam.status === ExamStatus.DRAFT) {
       updateExamData.status = ExamStatus.ACTIVE;
+    }
+    if (targetClassId !== exam.classId) {
+      updateExamData.classId = targetClassId;
     }
     if (startAt) updateExamData.startAt = new Date(startAt);
     if (loginDeadline) updateExamData.loginDeadline = new Date(loginDeadline);
@@ -130,26 +237,38 @@ export async function assignExamToStudents(
       });
     }
 
-    // 2. Persist assignments for valid students
+    // 6. Upsert ExamAssignment for EVERY student in the class (NEVER delete assignments)
     const assignments = [];
+    let eligibleCount = 0;
+    let ineligibleCount = 0;
 
-    for (const studentId of validStudentIds) {
+    for (const item of validEligibilityList) {
+      const isEligible = item.isEligible;
+      const reason = isEligible ? null : item.ineligibilityReason!.trim();
+
+      if (isEligible) eligibleCount++;
+      else ineligibleCount++;
+
       const assignment = await tx.examAssignment.upsert({
         where: {
           examId_studentId: {
             examId,
-            studentId,
+            studentId: item.studentId,
           },
         },
         update: {
+          isEligible,
+          ineligibilityReason: reason,
           allowedAttempts,
-          status: AssignmentStatus.ASSIGNED,
-          assignedAt: new Date(),
+          status: isEligible ? AssignmentStatus.ASSIGNED : AssignmentStatus.ASSIGNED,
+          updatedAt: new Date(),
         },
         create: {
           examId,
-          studentId,
+          studentId: item.studentId,
           allowedAttempts,
+          isEligible,
+          ineligibilityReason: reason,
           status: AssignmentStatus.ASSIGNED,
           assignedAt: new Date(),
         },
@@ -167,7 +286,9 @@ export async function assignExamToStudents(
         entityId: exam.id,
         newValue: {
           examTitle: exam.title,
-          assignedCount: assignments.length,
+          totalAssigned: assignments.length,
+          eligibleCount,
+          ineligibleCount,
           allowedAttempts,
         },
         ipAddress,
@@ -177,7 +298,9 @@ export async function assignExamToStudents(
 
     return {
       success: true,
-      assignedCount: assignments.length,
+      totalCount: assignments.length,
+      eligibleCount,
+      ineligibleCount,
       assignments,
     };
   });
@@ -246,7 +369,9 @@ export async function getStudentAssignedExams(studentId: string) {
       (att) => att.status === "IN_PROGRESS" && new Date(att.serverDeadline) > now
     );
 
-    const isSubmitted = latestAttempt && (latestAttempt.status === "SUBMITTED" || latestAttempt.status === "AUTO_SUBMITTED");
+    const isSubmitted =
+      latestAttempt &&
+      (latestAttempt.status === "SUBMITTED" || latestAttempt.status === "AUTO_SUBMITTED");
     const hasReachedMaxAttempts = asgn.attempts.length >= asgn.allowedAttempts && isSubmitted;
 
     const examItem = {
@@ -269,6 +394,8 @@ export async function getStudentAssignedExams(studentId: string) {
       allowedAttempts: asgn.allowedAttempts,
       attemptsCount: asgn.attempts.length,
       status: asgn.status,
+      isEligible: asgn.isEligible,
+      ineligibilityReason: asgn.ineligibilityReason,
       activeAttemptId: inProgressAttempt?.id || null,
       latestAttempt: latestAttempt
         ? {

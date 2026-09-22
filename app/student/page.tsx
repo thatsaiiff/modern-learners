@@ -145,7 +145,9 @@ export default async function StudentDashboardPage() {
                       </span>
                       <h4 className="text-base font-bold text-slate-900 leading-snug">{exam.title}</h4>
                     </div>
-                    {exam.activeAttemptId ? (
+                    {exam.isEligible === false ? (
+                      <Badge variant="warning">Not Eligible</Badge>
+                    ) : exam.activeAttemptId ? (
                       <Badge variant="warning">In Progress</Badge>
                     ) : (
                       <Badge variant="success">Open</Badge>
@@ -164,28 +166,47 @@ export default async function StudentDashboardPage() {
                     <span>{exam.totalMarks} Marks</span>
                   </div>
 
-                  {exam.instructions && (
+                  {exam.isEligible === false ? (
+                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950 space-y-1">
+                      <p className="font-bold flex items-center">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-600 mr-1.5 shrink-0" />
+                        You are not eligible to attempt this assessment.
+                      </p>
+                      <p className="text-slate-700 pl-3 leading-relaxed">
+                        Reason: <strong>{exam.ineligibilityReason || "Not eligible for this assessment."}</strong>
+                      </p>
+                      <p className="text-[11px] text-slate-400 pl-3">
+                        If you believe this is an error, please contact Saif Sir.
+                      </p>
+                    </div>
+                  ) : exam.instructions ? (
                     <p className="text-xs text-slate-600 line-clamp-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
                       {exam.instructions}
                     </p>
-                  )}
+                  ) : null}
 
                   <div className="pt-1">
-                    <Link href={`/student/exams/${exam.examId}`}>
-                      <Button className="w-full bg-indigo-600 hover:bg-indigo-700 min-h-[44px]">
-                        {exam.activeAttemptId ? (
-                          <>
-                            <RotateCcw className="h-4 w-4 mr-2" />
-                            Resume Exam Attempt
-                          </>
-                        ) : (
-                          <>
-                            <PlayCircle className="h-4 w-4 mr-2" />
-                            Start Examination
-                          </>
-                        )}
+                    {exam.isEligible === false ? (
+                      <Button disabled className="w-full bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed min-h-[44px]">
+                        Not Eligible to Start
                       </Button>
-                    </Link>
+                    ) : (
+                      <Link href={`/student/exams/${exam.examId}`}>
+                        <Button className="w-full bg-indigo-600 hover:bg-indigo-700 min-h-[44px]">
+                          {exam.activeAttemptId ? (
+                            <>
+                              <RotateCcw className="h-4 w-4 mr-2" />
+                              Resume Exam Attempt
+                            </>
+                          ) : (
+                            <>
+                              <PlayCircle className="h-4 w-4 mr-2" />
+                              Start Examination
+                            </>
+                          )}
+                        </Button>
+                      </Link>
+                    )}
                   </div>
                 </CardContent>
               </Card>

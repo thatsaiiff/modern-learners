@@ -84,6 +84,15 @@ export async function startExamAttempt(
     throw new Error("This examination has not been assigned to you.");
   }
 
+  // Check student eligibility (set by admin during assignment)
+  if (!assignment.isEligible) {
+    throw new Error(
+      assignment.ineligibilityReason
+        ? `You are not eligible to attempt this assessment: ${assignment.ineligibilityReason}`
+        : "You are not eligible to attempt this examination."
+    );
+  }
+
   const exam = assignment.exam;
 
   if (exam.examQuestions.length === 0) {
