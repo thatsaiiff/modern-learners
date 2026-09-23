@@ -2,8 +2,8 @@ import * as cheerio from "cheerio";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { sanitizeQuestionHtml } from "./sanitizer.service";
-import { logAudit } from "./audit.service";
-import { QuestionType, QuestionDifficulty } from "@prisma/client";
+import { QuestionType, QuestionDifficulty, PaperSourceType } from "@prisma/client";
+import { createQuestionPaper } from "./question-paper.service";
 
 // Zod schemas for validation
 export const importedOptionSchema = z.object({
@@ -325,9 +325,9 @@ export interface ConfirmExamImportInput {
 }
 
 /**
- * Confirms import and persists the exam and immutable question snapshots to the database
+ * Imports an HTML examination paper and creates ONE reusable Question Paper (QP-XXXXXX)
  */
-export async function confirmAndPersistExam(
+export async function confirmAndPersistQuestionPaper(
   input: ConfirmExamImportInput,
   actor?: { userId: string; role: string } | null,
   ipAddress?: string | null
@@ -338,234 +338,106 @@ export async function confirmAndPersistExam(
   }
 
   const { exam: examMeta, questions } = preview.sanitizedPayload;
-
   const targetClassNumber = input.classNumberOverride || examMeta.class;
   const targetDuration = input.durationMinutesOverride || examMeta.durationMinutes || 60;
-  const targetPassingPercentage = input.passingPercentageOverride || examMeta.passingPercentage || 80.0;
+  const calculatedTotalMarks = examMeta.totalMarks || preview.examSummary!.totalMarks;
 
-  // 1. Resolve Class
-  const classRecord = await prisma.class.findUnique({
-    where: { classNumber: targetClassNumber },
-  });
-  if (!classRecord) {
-    throw new Error(`Class ${targetClassNumber} not found in database.`);
-  }
-
-  // 2. Resolve Subject (by code or name)
-  let subjectRecord = null;
-  if (input.subjectCodeOverride) {
-    subjectRecord = await prisma.subject.findUnique({
-      where: { code: input.subjectCodeOverride },
-    });
-  } else {
-    subjectRecord = await prisma.subject.findFirst({
-      where: {
-        OR: [
-          { code: { equals: examMeta.subject.toUpperCase(), mode: "insensitive" } },
-          { name: { contains: examMeta.subject, mode: "insensitive" } },
-        ],
-      },
-    });
-  }
-
-  if (!subjectRecord) {
-    // Create new subject if not existing
-    const generatedCode = examMeta.subject.slice(0, 4).toUpperCase();
-    subjectRecord = await prisma.subject.create({
-      data: {
-        name: examMeta.subject,
-        code: generatedCode,
-        isActive: true,
-      },
-    });
-  }
-
-  // 3. Resolve Chapter (if specified)
-  let chapterId = input.chapterIdOverride || null;
-  if (!chapterId && examMeta.chapter) {
-    const existingChapter = await prisma.chapter.findFirst({
-      where: {
-        classId: classRecord.id,
-        subjectId: subjectRecord.id,
-        name: { equals: examMeta.chapter, mode: "insensitive" },
-      },
-    });
-
-    if (existingChapter) {
-      chapterId = existingChapter.id;
-    } else {
-      const newChapter = await prisma.chapter.create({
-        data: {
-          classId: classRecord.id,
-          subjectId: subjectRecord.id,
-          name: examMeta.chapter,
-          description: `Imported with exam ${examMeta.title}`,
-        },
-      });
-      chapterId = newChapter.id;
-    }
-  }
-
-  const startAt = input.startAt ? new Date(input.startAt) : new Date();
-  const loginDeadline = input.loginDeadline
-    ? new Date(input.loginDeadline)
-    : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days window by default
-
-  // 4. Execute atomic database persistence
-  return await prisma.$transaction(async (tx) => {
-    // Create Exam Record
-    const exam = await tx.exam.create({
-      data: {
-        title: examMeta.title,
-        classId: classRecord.id,
-        subjectId: subjectRecord.id,
-        chapterId,
-        description: examMeta.description || null,
-        instructions: examMeta.instructions || null,
-        startAt,
-        loginDeadline,
-        durationMinutes: targetDuration,
-        totalMarks: examMeta.totalMarks || preview.examSummary!.totalMarks,
-        passingPercentage: targetPassingPercentage,
-        negativeMarkingEnabled: examMeta.negativeMarking?.enabled || false,
-        negativeMarkValue: examMeta.negativeMarking?.wrongAnswerMarks || 0,
-        randomizeQuestions: examMeta.randomization?.questions || false,
-        randomizeOptions: examMeta.randomization?.options || false,
-        status: "DRAFT",
+  // 1. Create Question Paper (QP-000001)
+  const questionPaper = await createQuestionPaper(
+    {
+      title: examMeta.title,
+      description: examMeta.description || null,
+      instructions: examMeta.instructions || null,
+      classNumber: targetClassNumber,
+      subjectCode: input.subjectCodeOverride || examMeta.subject,
+      chapter: examMeta.chapter || null,
+      topic: preview.examSummary?.chapter || null,
+      durationMinutes: targetDuration,
+      totalMarks: calculatedTotalMarks,
+      sourceType: PaperSourceType.HTML_IMPORT,
+      sourceMeta: {
         formatVersion: "1.0",
-        createdBy: actor?.userId || null,
+        importedAt: new Date().toISOString(),
       },
-    });
-
-    // Create default grading rules snapshot
-    const defaultGradingRules = [
-      { minPercentage: 100, maxPercentage: 100, label: "OP — Outstandingly Perfect", displayOrder: 1 },
-      { minPercentage: 95, maxPercentage: 99.99, label: "Outstanding", displayOrder: 2 },
-      { minPercentage: 90, maxPercentage: 94.99, label: "Excellent", displayOrder: 3 },
-      { minPercentage: 80, maxPercentage: 89.99, label: "Pass", displayOrder: 4 },
-      { minPercentage: 0, maxPercentage: 79.99, label: "Fail — Needs Improvement", displayOrder: 5 },
-    ];
-
-    for (const rule of defaultGradingRules) {
-      await tx.examGradingRule.create({
-        data: {
-          examId: exam.id,
-          ...rule,
-        },
-      });
-    }
-
-    // Process and snapshot each question
-    const examQuestions = [];
-
-    for (let i = 0; i < questions.length; i++) {
-      const q = questions[i];
-      let questionBankId: string | null = null;
-
-      // Question type map
-      const mappedType = q.type.toUpperCase() as QuestionType;
-      const mappedDifficulty = q.difficulty.toUpperCase() as QuestionDifficulty;
-
-      // Question Bank persistence (optional / default true)
-      if (input.addToQuestionBank !== false) {
-        // Upsert question in Question Bank
-        const existingQ = await tx.question.findUnique({
-          where: { customId: q.id },
-        });
-
-        if (existingQ) {
-          questionBankId = existingQ.id;
-        } else {
-          const newQ = await tx.question.create({
-            data: {
-              customId: q.id,
-              classId: classRecord.id,
-              subjectId: subjectRecord.id,
-              chapterId,
-              questionType: mappedType,
-              difficulty: mappedDifficulty,
-              questionText: q.question.text,
-              explanation: q.explanation || null,
-              defaultMarks: q.marks,
-              imageSrc: q.question.image?.src || null,
-              imageAlt: q.question.image?.alt || null,
-              isActive: true,
-            },
-          });
-          questionBankId = newQ.id;
-
-          // Create Options if applicable
-          if (q.options && q.options.length > 0) {
-            for (let optIdx = 0; optIdx < q.options.length; optIdx++) {
-              const opt = q.options[optIdx];
-              await tx.questionOption.create({
-                data: {
-                  questionId: newQ.id,
-                  optionKey: opt.id,
-                  optionText: opt.text,
-                  isCorrect: opt.correct,
-                  orderNumber: optIdx + 1,
-                },
-              });
-            }
-          }
-        }
-      }
-
-      // Create Immutable Question Snapshot for this Exam
-      const questionSnapshot = {
+      questions: questions.map((q) => ({
         customId: q.id,
         type: q.type,
-        topic: q.topic || null,
-        chapter: q.chapter || examMeta.chapter || null,
+        topic: q.topic,
         difficulty: q.difficulty,
         marks: q.marks,
         question: q.question,
-        options: q.options || [],
-        correctAnswer:
-          q.type === "mcq"
-            ? q.options?.find((o) => o.correct)?.id
-            : q.type === "multiple_correct"
-            ? q.options?.filter((o) => o.correct).map((o) => o.id)
-            : q.answer,
-        explanation: q.explanation || null,
-      };
+        options: q.options,
+        answer: q.answer,
+        explanation: q.explanation,
+      })),
+    },
+    actor,
+    ipAddress
+  );
 
-      const examQ = await tx.examQuestion.create({
-        data: {
-          examId: exam.id,
-          questionId: questionBankId,
-          questionSnapshot,
-          marks: q.marks,
-          orderNumber: i + 1,
-        },
+  // 2. Optionally upsert individual questions into Question Bank
+  if (input.addToQuestionBank !== false) {
+    for (const q of questions) {
+      const existingQ = await prisma.question.findUnique({
+        where: { customId: q.id },
       });
 
-      examQuestions.push(examQ);
+      if (!existingQ) {
+        const newQ = await prisma.question.create({
+          data: {
+            customId: q.id,
+            classId: questionPaper.classId,
+            subjectId: questionPaper.subjectId,
+            questionType: q.type.toUpperCase() as QuestionType,
+            difficulty: q.difficulty.toUpperCase() as QuestionDifficulty,
+            questionText: q.question.text,
+            explanation: q.explanation || null,
+            defaultMarks: q.marks,
+            imageSrc: q.question.image?.src || null,
+            imageAlt: q.question.image?.alt || null,
+            isActive: true,
+          },
+        });
+
+        if (q.options && q.options.length > 0) {
+          for (let optIdx = 0; optIdx < q.options.length; optIdx++) {
+            const opt = q.options[optIdx];
+            await prisma.questionOption.create({
+              data: {
+                questionId: newQ.id,
+                optionKey: opt.id,
+                optionText: opt.text,
+                isCorrect: opt.correct,
+                orderNumber: optIdx + 1,
+              },
+            });
+          }
+        }
+      }
     }
+  }
 
-    await logAudit(
-      {
-        actorId: actor?.userId,
-        actorRole: actor?.role,
-        action: "EXAM_IMPORTED",
-        entityType: "Exam",
-        entityId: exam.id,
-        newValue: {
-          title: exam.title,
-          classNumber: classRecord.classNumber,
-          subject: subjectRecord.name,
-          questionsCount: examQuestions.length,
-          totalMarks: exam.totalMarks,
-        },
-        ipAddress,
-      },
-      tx
-    );
+  return {
+    questionPaper,
+    paperId: questionPaper.id,
+    paperCode: questionPaper.paperCode,
+    questionsCount: questions.length,
+  };
+}
 
-    return {
-      exam,
-      questionsCount: examQuestions.length,
-    };
-  });
+/**
+ * Confirms import and persists the exam and immutable question snapshots to the database
+ */
+export async function confirmAndPersistExam(
+  input: ConfirmExamImportInput,
+  actor?: { userId: string; role: string } | null,
+  ipAddress?: string | null
+) {
+  const paperResult = await confirmAndPersistQuestionPaper(input, actor, ipAddress);
+  return {
+    exam: paperResult.questionPaper,
+    questionsCount: paperResult.questionsCount,
+    paperCode: paperResult.paperCode,
+    paperId: paperResult.paperId,
+  };
 }

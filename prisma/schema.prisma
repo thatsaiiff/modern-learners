@@ -51,6 +51,18 @@ enum QuestionDifficulty {
   HARD
 }
 
+enum PaperSourceType {
+  HTML_IMPORT
+  MANUAL
+  AI_GENERATED
+  DUPLICATED
+}
+
+enum PaperStatus {
+  ACTIVE
+  ARCHIVED
+}
+
 enum ExamStatus {
   DRAFT
   PUBLISHED
@@ -118,6 +130,7 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   createdExams         Exam[]              @relation("ExamCreator")
+  createdPapers        QuestionPaper[]     @relation("PaperCreator")
   attendanceSessions   AttendanceSession[] @relation("AttendanceCreator")
   reviewedRetakes      RetakeRequest[]     @relation("RetakeReviewer")
   teacherRemarks       TeacherRemark[]     @relation("RemarkAuthor")
@@ -173,6 +186,7 @@ model Class {
   chapters           Chapter[]
   enrollments        StudentEnrollment[]
   questions          Question[]
+  questionPapers     QuestionPaper[]
   exams              Exam[]
   attendanceSessions AttendanceSession[]
 }
@@ -185,10 +199,11 @@ model Subject {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  classSubjects ClassSubject[]
-  chapters      Chapter[]
-  questions     Question[]
-  exams         Exam[]
+  classSubjects  ClassSubject[]
+  chapters       Chapter[]
+  questions      Question[]
+  questionPapers QuestionPaper[]
+  exams          Exam[]
 }
 
 model ClassSubject {
@@ -300,12 +315,13 @@ model Question {
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
 
-  class          Class?           @relation(fields: [classId], references: [id], onDelete: SetNull)
-  subject        Subject?         @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  chapter        Chapter?         @relation(fields: [chapterId], references: [id], onDelete: SetNull)
-  topic          Topic?           @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  class          Class?                  @relation(fields: [classId], references: [id], onDelete: SetNull)
+  subject        Subject?                @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  chapter        Chapter?                @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  topic          Topic?                  @relation(fields: [topicId], references: [id], onDelete: SetNull)
   options        QuestionOption[]
   examQuestions  ExamQuestion[]
+  paperQuestions QuestionPaperQuestion[]
   attemptAnswers AttemptAnswer[]
 
   @@index([classId, subjectId])
@@ -325,9 +341,54 @@ model QuestionOption {
   @@index([questionId])
 }
 
+model QuestionPaper {
+  id             String          @id @default(uuid())
+  paperCode      String          @unique // Permanent generated ID e.g. "QP-000001"
+  title          String
+  description    String?
+  instructions   String?
+  classId        String
+  subjectId      String
+  chapter        String?
+  topic          String?
+  totalQuestions Int             @default(0)
+  totalMarks     Float           @default(0.0)
+  sourceType     PaperSourceType @default(HTML_IMPORT)
+  sourceMeta     Json?           // Source metadata: AI params, sourcePaperIds, filename
+  status         PaperStatus     @default(ACTIVE)
+  createdBy      String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  class          Class                   @relation(fields: [classId], references: [id], onDelete: Restrict)
+  subject        Subject                 @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  creator        User?                   @relation("PaperCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  paperQuestions QuestionPaperQuestion[]
+  exams          Exam[]
+
+  @@index([classId, subjectId])
+  @@index([status])
+}
+
+model QuestionPaperQuestion {
+  id               String   @id @default(uuid())
+  questionPaperId  String
+  questionId       String?
+  questionSnapshot Json // Snapshotted question structure (text, options, correct answer, explanation, marks)
+  marks            Float    @default(1.0)
+  orderNumber      Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  questionPaper QuestionPaper @relation(fields: [questionPaperId], references: [id], onDelete: Cascade)
+  question      Question?     @relation(fields: [questionId], references: [id], onDelete: SetNull)
+
+  @@index([questionPaperId])
+}
+
 model Exam {
   id                     String           @id @default(uuid())
   title                  String
+  questionPaperId        String?
   classId                String
   subjectId              String
   chapterId              String?
@@ -354,6 +415,7 @@ model Exam {
   class          Class             @relation(fields: [classId], references: [id], onDelete: Restrict)
   subject        Subject           @relation(fields: [subjectId], references: [id], onDelete: Restrict)
   chapter        Chapter?          @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  questionPaper  QuestionPaper?    @relation(fields: [questionPaperId], references: [id], onDelete: SetNull)
   creator        User?             @relation("ExamCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   gradingRules   ExamGradingRule[]
   examQuestions  ExamQuestion[]
@@ -364,6 +426,7 @@ model Exam {
 
   @@index([classId, subjectId])
   @@index([status])
+  @@index([questionPaperId])
 }
 
 model ExamGradingRule {

@@ -19,6 +19,7 @@ import {
   LogOut,
   Menu,
   X,
+  Layers,
 } from "lucide-react";
 import { AdminSessionPayload } from "@/lib/auth/types";
 
@@ -34,9 +35,10 @@ export function AdminShell({ session, children }: AdminShellProps) {
   const navItems = [
     { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
     { label: "Students", href: "/admin/students", icon: Users },
-    { label: "Exams", href: "/admin/exams", icon: FileText },
-    { label: "Upload HTML", href: "/admin/exams/import", icon: Upload },
+    { label: "Question Papers", href: "/admin/papers", icon: Layers },
     { label: "Question Bank", href: "/admin/questions", icon: BookOpen },
+    { label: "Exams", href: "/admin/exams", icon: FileText },
+    { label: "Import HTML", href: "/admin/exams/import", icon: Upload },
     { label: "Results", href: "/admin/results", icon: Award },
     { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
     { label: "Attendance", href: "/admin/attendance", icon: CalendarCheck2 },

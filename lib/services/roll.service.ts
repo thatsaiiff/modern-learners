@@ -28,6 +28,31 @@ export async function generateStudentCode(
 }
 
 /**
+ * Generates the next permanent Question Paper Code (e.g. QP-000001, QP-000002)
+ */
+export async function generatePaperCode(
+  tx?: Prisma.TransactionClient
+): Promise<string> {
+  const db = tx || prisma;
+  const count = await db.questionPaper.count();
+  const nextSeq = count + 1;
+  const padded = String(nextSeq).padStart(6, "0");
+  const code = `QP-${padded}`;
+
+  // Verify uniqueness
+  const existing = await db.questionPaper.findUnique({
+    where: { paperCode: code },
+  });
+
+  if (existing) {
+    const uniqueSeq = count + 1000 + Math.floor(Math.random() * 900);
+    return `QP-${String(uniqueSeq).padStart(6, "0")}`;
+  }
+
+  return code;
+}
+
+/**
  * Generates an academic roll number: CLASS-SESSION-ROLL (e.g. 08-2627-001)
  */
 export async function generateRollNumber(

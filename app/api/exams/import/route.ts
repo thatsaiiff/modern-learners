@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminSession } from "@/lib/auth/session";
-import { confirmAndPersistExam } from "@/lib/services/exam-importer.service";
+import { confirmAndPersistQuestionPaper } from "@/lib/services/exam-importer.service";
 
 const confirmImportSchema = z.object({
   htmlContent: z.string().min(1, "HTML content is required"),
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await confirmAndPersistExam(
+    const result = await confirmAndPersistQuestionPaper(
       parsed.data,
       { userId: admin.userId, role: admin.role },
       req.headers.get("x-forwarded-for") || undefined
@@ -40,8 +40,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Exam "${result.exam.title}" imported successfully with ${result.questionsCount} questions.`,
-      examId: result.exam.id,
+      message: `Question Paper "${result.questionPaper.title}" (${result.paperCode}) imported successfully with ${result.questionsCount} questions.`,
+      paperId: result.paperId,
+      paperCode: result.paperCode,
       data: result,
     });
   } catch (error: unknown) {

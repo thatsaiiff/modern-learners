@@ -12,6 +12,7 @@ import {
   HelpCircle,
   Eye,
   ListChecks,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -27,7 +28,7 @@ export default function ExamImportPage() {
 
   // Import State
   const [isImporting, setIsImporting] = useState(false);
-  const [importSuccess, setImportSuccess] = useState<{ examId: string; message: string } | null>(null);
+  const [importSuccess, setImportSuccess] = useState<{ paperId: string; paperCode: string; message: string } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,17 +97,18 @@ export default function ExamImportPage() {
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        setImportError(data.error || "Failed to persist exam.");
+        setImportError(data.error || "Failed to persist Question Paper.");
         setIsImporting(false);
         return;
       }
 
       setImportSuccess({
-        examId: data.examId,
+        paperId: data.paperId || data.examId,
+        paperCode: data.paperCode || "QP-000001",
         message: data.message,
       });
     } catch {
-      setImportError("Network error during exam import.");
+      setImportError("Network error during paper import.");
     } finally {
       setIsImporting(false);
     }
@@ -246,22 +248,35 @@ export default function ExamImportPage() {
 
       {/* Success Notification */}
       {importSuccess && (
-        <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-6 shadow-sm">
-          <div className="flex items-start space-x-3">
-            <CheckCircle2 className="h-6 w-6 text-emerald-600 shrink-0 mt-0.5" />
+        <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-6 shadow-sm animate-in fade-in">
+          <div className="flex items-start space-x-3.5">
+            <div className="h-10 w-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
             <div className="space-y-2">
-              <h3 className="text-base font-bold text-emerald-900">Exam Successfully Imported!</h3>
-              <p className="text-xs sm:text-sm text-emerald-700">{importSuccess.message}</p>
-              <div className="pt-2 flex space-x-3">
-                <Link href={`/admin/exams/${importSuccess.examId}`}>
+              <div>
+                <span className="font-mono text-xs font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md">
+                  {importSuccess.paperCode}
+                </span>
+                <h3 className="text-base font-bold text-emerald-950 mt-1">Question Paper Successfully Created!</h3>
+              </div>
+              <p className="text-xs sm:text-sm text-emerald-800">{importSuccess.message}</p>
+              <div className="pt-2 flex flex-wrap gap-2.5">
+                <Link href={`/admin/papers/${importSuccess.paperId}`}>
                   <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
                     <Eye className="h-4 w-4 mr-1.5" />
-                    View Imported Exam Details
+                    Preview Question Paper
                   </Button>
                 </Link>
-                <Link href="/admin/exams">
+                <Link href={`/admin/papers/${importSuccess.paperId}/create-exam`}>
+                  <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700">
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Create Exam from Paper
+                  </Button>
+                </Link>
+                <Link href="/admin/papers">
                   <Button size="sm" variant="outline">
-                    View All Exams
+                    Question Papers Library
                   </Button>
                 </Link>
               </div>
