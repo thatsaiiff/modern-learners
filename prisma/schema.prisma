@@ -369,7 +369,6 @@ model Question {
   options               QuestionOption[]
   examQuestions         ExamQuestion[]
   paperQuestions        QuestionPaperQuestion[]
-  attemptAnswers        AttemptAnswer[]
   subjectiveSubmissions SubjectiveSubmission[]
 
   @@index([classId, subjectId])
@@ -571,7 +570,7 @@ model AttemptQuestion {
 model AttemptAnswer {
   id              String    @id @default(uuid())
   attemptId       String
-  questionId      String? // Ref to original question if available
+  questionId      String? // Ref to ExamQuestion.id, Question.id, or customId
   selectedOptions Json? // Array of chosen option keys, e.g. ["B"]
   answerText      String?
   numericAnswer   Float?
@@ -581,9 +580,9 @@ model AttemptAnswer {
   updatedAt       DateTime  @updatedAt
 
   attempt  ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  question Question?   @relation(fields: [questionId], references: [id], onDelete: SetNull)
 
   @@index([attemptId])
+  @@index([questionId])
 }
 
 model Result {
