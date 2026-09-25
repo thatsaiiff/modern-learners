@@ -63,6 +63,45 @@ enum PaperStatus {
   ARCHIVED
 }
 
+enum SubmissionFormat {
+  TYPED_TEXT
+  HANDWRITTEN_DOCUMENT
+  HYBRID
+}
+
+enum EvaluationJobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  FAILED_VALIDATION
+}
+
+enum TeacherReviewAction {
+  APPROVED
+  MODIFIED
+  REJECTED
+}
+
+enum PracticeSourceType {
+  ADMIN_CREATED
+  STUDENT_UPLOAD
+  AI_GENERATED
+  DUPLICATED
+}
+
+enum PracticeVisibility {
+  PRIVATE
+  SHARED_CLASS
+  PUBLIC_ACADEMY
+}
+
+enum PracticeAttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  ABANDONED
+}
+
 enum ExamStatus {
   DRAFT
   PUBLISHED
@@ -129,11 +168,13 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  createdExams         Exam[]              @relation("ExamCreator")
-  createdPapers        QuestionPaper[]     @relation("PaperCreator")
-  attendanceSessions   AttendanceSession[] @relation("AttendanceCreator")
-  reviewedRetakes      RetakeRequest[]     @relation("RetakeReviewer")
-  teacherRemarks       TeacherRemark[]     @relation("RemarkAuthor")
+  createdExams               Exam[]                    @relation("ExamCreator")
+  createdPapers              QuestionPaper[]           @relation("PaperCreator")
+  attendanceSessions         AttendanceSession[]       @relation("AttendanceCreator")
+  reviewedRetakes            RetakeRequest[]           @relation("RetakeReviewer")
+  teacherRemarks             TeacherRemark[]           @relation("RemarkAuthor")
+  reviewedTeacherEvaluations TeacherEvaluationReview[] @relation("TeacherReviewer")
+  createdPracticePapers      PracticePaper[]           @relation("AdminPracticeCreator")
 }
 
 model Student {
@@ -148,14 +189,17 @@ model Student {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  enrollments        StudentEnrollment[]
-  academicMovements  AcademicMovement[]
-  examAssignments    ExamAssignment[]
-  examAttempts       ExamAttempt[]
-  results            Result[]
-  retakeRequests     RetakeRequest[]
-  attendanceRecords  AttendanceRecord[]
-  teacherRemarks     TeacherRemark[]
+  enrollments         StudentEnrollment[]
+  academicMovements   AcademicMovement[]
+  examAssignments     ExamAssignment[]
+  examAttempts        ExamAttempt[]
+  results             Result[]
+  retakeRequests      RetakeRequest[]
+  attendanceRecords   AttendanceRecord[]
+  teacherRemarks      TeacherRemark[]
+  ownedPracticePapers PracticePaper[]     @relation("StudentPracticeOwner")
+  practiceAttempts    PracticeAttempt[]   @relation("StudentPracticeAttempts")
+  practiceResults     PracticeResult[]    @relation("StudentPracticeResults")
 
   @@index([status])
 }
@@ -189,6 +233,7 @@ model Class {
   questionPapers     QuestionPaper[]
   exams              Exam[]
   attendanceSessions AttendanceSession[]
+  practicePapers     PracticePaper[]
 }
 
 model Subject {
@@ -204,6 +249,7 @@ model Subject {
   questions      Question[]
   questionPapers QuestionPaper[]
   exams          Exam[]
+  practicePapers PracticePaper[]
 }
 
 model ClassSubject {
@@ -298,31 +344,33 @@ model AcademicMovement {
 }
 
 model Question {
-  id           String             @id @default(uuid())
-  customId     String?            @unique // e.g. "PHY8-WEP-001"
-  classId      String?
-  subjectId    String?
-  chapterId    String?
-  topicId      String?
-  questionType QuestionType       @default(MCQ)
-  difficulty   QuestionDifficulty @default(MEDIUM)
-  questionText String
-  explanation  String?
-  defaultMarks Float              @default(1.0)
-  imageSrc     String?
-  imageAlt     String?
-  isActive     Boolean            @default(true)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  id                    String                  @id @default(uuid())
+  customId              String?                 @unique // e.g. "PHY8-WEP-001"
+  classId               String?
+  subjectId             String?
+  chapterId             String?
+  topicId               String?
+  questionType          QuestionType            @default(MCQ)
+  difficulty            QuestionDifficulty      @default(MEDIUM)
+  questionText          String
+  explanation           String?
+  defaultMarks          Float                   @default(1.0)
+  imageSrc              String?
+  imageAlt              String?
+  rubric                Json?                   // Marking criteria for subjective questions
+  isActive              Boolean                 @default(true)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
 
-  class          Class?                  @relation(fields: [classId], references: [id], onDelete: SetNull)
-  subject        Subject?                @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  chapter        Chapter?                @relation(fields: [chapterId], references: [id], onDelete: SetNull)
-  topic          Topic?                  @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  options        QuestionOption[]
-  examQuestions  ExamQuestion[]
-  paperQuestions QuestionPaperQuestion[]
-  attemptAnswers AttemptAnswer[]
+  class                 Class?                  @relation(fields: [classId], references: [id], onDelete: SetNull)
+  subject               Subject?                @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  chapter               Chapter?                @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  topic                 Topic?                  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  options               QuestionOption[]
+  examQuestions         ExamQuestion[]
+  paperQuestions        QuestionPaperQuestion[]
+  attemptAnswers        AttemptAnswer[]
+  subjectiveSubmissions SubjectiveSubmission[]
 
   @@index([classId, subjectId])
   @@index([topicId])
@@ -443,16 +491,17 @@ model ExamGradingRule {
 }
 
 model ExamQuestion {
-  id               String   @id @default(uuid())
-  examId           String
-  questionId       String?
-  questionSnapshot Json // Snapshotted question structure (text, options, correct answer, explanation)
-  marks            Float    @default(1.0)
-  orderNumber      Int      @default(0)
+  id                    String                 @id @default(uuid())
+  examId                String
+  questionId            String?
+  questionSnapshot      Json // Snapshotted question structure (text, options, correct answer, explanation)
+  marks                 Float                  @default(1.0)
+  orderNumber           Int                    @default(0)
 
-  exam            Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
-  question        Question?         @relation(fields: [questionId], references: [id], onDelete: SetNull)
-  attemptQuestions AttemptQuestion[]
+  exam                  Exam                   @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question              Question?              @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  attemptQuestions      AttemptQuestion[]
+  subjectiveSubmissions SubjectiveSubmission[]
 
   @@index([examId])
 }
@@ -478,26 +527,27 @@ model ExamAssignment {
 }
 
 model ExamAttempt {
-  id              String        @id @default(uuid())
-  examId          String
-  studentId       String
-  assignmentId    String
-  attemptNumber   Int           @default(1)
-  startedAt       DateTime      @default(now())
-  submittedAt     DateTime?
-  serverDeadline  DateTime
-  autoSubmitted   Boolean       @default(false)
-  durationSeconds Int           @default(0)
-  status          AttemptStatus @default(IN_PROGRESS)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                    String                 @id @default(uuid())
+  examId                String
+  studentId             String
+  assignmentId          String
+  attemptNumber         Int                    @default(1)
+  startedAt             DateTime               @default(now())
+  submittedAt           DateTime?
+  serverDeadline        DateTime
+  autoSubmitted         Boolean                @default(false)
+  durationSeconds       Int                    @default(0)
+  status                AttemptStatus          @default(IN_PROGRESS)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 
-  exam             Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
-  student          Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  assignment       ExamAssignment    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  attemptQuestions AttemptQuestion[]
-  attemptAnswers   AttemptAnswer[]
-  result           Result?
+  exam                  Exam                   @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student               Student                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignment            ExamAssignment         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  attemptQuestions      AttemptQuestion[]
+  attemptAnswers        AttemptAnswer[]
+  subjectiveSubmissions SubjectiveSubmission[]
+  result                Result?
 
   @@index([examId, studentId])
   @@index([status])
@@ -663,4 +713,247 @@ model TeacherRemark {
 
   @@unique([studentId, academicSessionId])
   @@index([studentId])
+}
+
+// ============================================================================
+// SUBJECTIVE SUBMISSION & HANDWRITTEN DOCUMENTS
+// ============================================================================
+
+model SubjectiveSubmission {
+  id               String           @id @default(uuid())
+  attemptId        String
+  questionId       String?          // Reference to original Question if linked
+  examQuestionId   String?          // Reference to ExamQuestion
+  submissionFormat SubmissionFormat @default(TYPED_TEXT)
+  typedContent     String?          // Stored text for typed answers
+  wordCount        Int              @default(0)
+  submittedAt      DateTime         @default(now())
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  attempt          ExamAttempt               @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question         Question?                 @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  examQuestion     ExamQuestion?             @relation(fields: [examQuestionId], references: [id], onDelete: SetNull)
+  documents        SubmissionDocument[]
+  evaluationJobs   EvaluationJob[]
+  aiEvaluations    AIEvaluation[]
+  teacherReviews   TeacherEvaluationReview[]
+
+  @@index([attemptId])
+  @@index([questionId])
+  @@index([examQuestionId])
+}
+
+model SubmissionDocument {
+  id                   String   @id @default(uuid())
+  submissionId         String
+  originalFilename     String
+  storageKey           String   // Path in private storage
+  mimeType             String   // "application/pdf", "image/jpeg", "image/png"
+  fileSizeBytes        Int
+  pageCount            Int      @default(1)
+  structuredExtraction Json?    // Structured Extracted Representation (SER)
+  ocrConfidence        Float?
+  createdAt            DateTime @default(now())
+
+  submission           SubjectiveSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+}
+
+// ============================================================================
+// AI EVALUATION & TEACHER REVIEW
+// ============================================================================
+
+model EvaluationJob {
+  id             String              @id @default(uuid())
+  submissionId   String
+  status         EvaluationJobStatus @default(QUEUED)
+  targetModel    String              // e.g. "anthropic/claude-3-5-sonnet"
+  promptVersion  String              // e.g. "eval-subjective-v1.2"
+  queuedAt       DateTime            @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+  retryCount     Int                 @default(0)
+  errorMessage   String?
+  errorMeta      Json?
+
+  submission     SubjectiveSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  aiEvaluations  AIEvaluation[]
+
+  @@index([submissionId])
+  @@index([status])
+}
+
+model AIEvaluation {
+  id                     String   @id @default(uuid())
+  submissionId           String
+  jobId                  String?
+  proposedMarks          Float
+  maxMarks               Float
+  confidence             Float    // 0.00 to 1.00
+  criteriaEvaluations    Json     // Array of criterion breakdown { criterionId, title, maxMarks, awardedMarks, evidenceQuote, reasoning }
+  deductions             Json     // Array of deductions { category, pointsDeducted, explanation, locationHint }
+  positiveFeedback       String
+  improvementSuggestions Json     // String array
+  extractedAnswerSummary String?
+  uncertainties          Json?    // Array of flagged ambiguities
+  modelProvider          String   // "omniroute"
+  modelName              String   // e.g. "anthropic/claude-3-5-sonnet"
+  promptVersion          String
+  promptHash             String?
+  tokenUsage             Json     // { promptTokens, completionTokens, totalTokens }
+  estimatedCostUsd       Float?
+  rawResponse            Json?    // Optional debug payload
+  createdAt              DateTime @default(now())
+
+  submission             SubjectiveSubmission     @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  job                    EvaluationJob?           @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  teacherReview          TeacherEvaluationReview?
+
+  @@index([submissionId])
+}
+
+model TeacherEvaluationReview {
+  id                String              @id @default(uuid())
+  submissionId      String
+  aiEvaluationId    String?             @unique
+  reviewerId        String              // User ID of Teacher/Admin
+  action            TeacherReviewAction @default(APPROVED)
+  officialMarks     Float               // The final authoritative mark awarded
+  maxMarks          Float
+  marksModified     Boolean             @default(false)
+  scoreDelta        Float               @default(0.0) // officialMarks - proposedMarks
+  rubricAdjustments Json?               // Specific modified criteria scores
+  teacherNotes      String?             // Private teacher annotation
+  feedbackToStudent String?             // Final customized feedback shown to student
+  reviewedAt        DateTime            @default(now())
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  submission        SubjectiveSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  aiEvaluation      AIEvaluation?        @relation(fields: [aiEvaluationId], references: [id], onDelete: SetNull)
+  reviewer          User                 @relation("TeacherReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@index([submissionId])
+  @@index([reviewerId])
+}
+
+// ============================================================================
+// PRACTICE DOMAIN ENTITIES
+// ============================================================================
+
+model PracticePaper {
+  id              String             @id @default(uuid())
+  practiceCode    String             @unique // e.g. "PRAC-000001"
+  title           String
+  description     String?
+  instructions    String?
+  classId         String?            // Optional link to standard Class
+  subjectId       String?            // Optional link to standard Subject
+  chapter         String?
+  topic           String?
+  totalQuestions  Int                @default(0)
+  totalMarks      Float              @default(0.0)
+  durationMinutes Int                @default(30)
+  sourceType      PracticeSourceType @default(STUDENT_UPLOAD)
+  sourceMeta      Json?              // Ingestion details, generator prompt, etc.
+  visibility      PracticeVisibility @default(PRIVATE)
+  ownerStudentId  String?            // Nullable for Admin-created, required for Student-uploaded
+  createdBy       String?            // Admin User ID if created by teacher
+  status          PaperStatus        @default(ACTIVE)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  class           Class?                  @relation(fields: [classId], references: [id], onDelete: SetNull)
+  subject         Subject?                @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  ownerStudent    Student?                @relation("StudentPracticeOwner", fields: [ownerStudentId], references: [id], onDelete: Cascade)
+  creator         User?                   @relation("AdminPracticeCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  questions       PracticePaperQuestion[]
+  attempts        PracticeAttempt[]
+  results         PracticeResult[]
+
+  @@index([ownerStudentId])
+  @@index([classId, subjectId])
+  @@index([visibility])
+  @@index([status])
+}
+
+model PracticePaperQuestion {
+  id               String        @id @default(uuid())
+  practicePaperId  String
+  questionSnapshot Json          // Snapshotted question format (type, text, options, answer, rubric, explanation)
+  marks            Float         @default(1.0)
+  orderNumber      Int           @default(0)
+  createdAt        DateTime      @default(now())
+
+  practicePaper    PracticePaper @relation(fields: [practicePaperId], references: [id], onDelete: Cascade)
+
+  @@index([practicePaperId])
+}
+
+model PracticeAttempt {
+  id              String                @id @default(uuid())
+  practicePaperId String
+  studentId       String
+  attemptNumber   Int                   @default(1)
+  startedAt       DateTime              @default(now())
+  submittedAt     DateTime?
+  durationSeconds Int                   @default(0)
+  status          PracticeAttemptStatus @default(IN_PROGRESS)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  practicePaper   PracticePaper           @relation(fields: [practicePaperId], references: [id], onDelete: Cascade)
+  student         Student                 @relation("StudentPracticeAttempts", fields: [studentId], references: [id], onDelete: Cascade)
+  answers         PracticeAttemptAnswer[]
+  result          PracticeResult?
+
+  @@index([practicePaperId, studentId])
+  @@index([status])
+}
+
+model PracticeAttemptAnswer {
+  id              String    @id @default(uuid())
+  attemptId       String
+  questionIndex   Int
+  selectedOptions Json?
+  answerText      String?
+  numericAnswer   Float?
+  isCorrect       Boolean?
+  marksAwarded    Float     @default(0.0)
+  aiEvaluation    Json?     // Instant AI formative feedback & rubric assessment
+  answeredAt      DateTime  @default(now())
+
+  attempt         PracticeAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+}
+
+model PracticeResult {
+  id               String   @id @default(uuid())
+  attemptId        String   @unique
+  studentId        String
+  practicePaperId  String
+  rawMarks         Float
+  maximumMarks     Float
+  percentage       Float
+  grade            String   // Informational grade
+  performanceLabel String
+  passed           Boolean
+  correctCount     Int      @default(0)
+  wrongCount       Int      @default(0)
+  unansweredCount  Int      @default(0)
+  topicBreakdown   Json?    // Topic-level accuracy stats
+  aiTutorFeedback  Json?    // Overall AI diagnostic analysis & study advice
+  isOfficial       Boolean  @default(false) // Always false for Practice Domain
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  attempt          PracticeAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  student          Student         @relation("StudentPracticeResults", fields: [studentId], references: [id], onDelete: Cascade)
+  practicePaper    PracticePaper   @relation(fields: [practicePaperId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([practicePaperId])
 }
