@@ -479,7 +479,8 @@ export async function createExamFromPaper(
           durationMinutes,
         },
         actor,
-        ipAddress
+        ipAddress,
+        tx
       );
     }
 

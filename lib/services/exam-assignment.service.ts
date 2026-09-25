@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { AssignmentStatus, ExamStatus, StudentStatus } from "@prisma/client";
+import { AssignmentStatus, ExamStatus, StudentStatus, Prisma } from "@prisma/client";
 import { logAudit } from "./audit.service";
 
 export interface StudentEligibilityItem {
@@ -120,7 +120,8 @@ export async function getEligibleStudentsForExam(examId: string, requestedClassN
 export async function assignExamToStudents(
   input: AssignExamInput,
   actor?: { userId: string; role: string } | null,
-  ipAddress?: string | null
+  ipAddress?: string | null,
+  txClient?: Prisma.TransactionClient
 ) {
   const {
     examId,
@@ -133,7 +134,9 @@ export async function assignExamToStudents(
     durationMinutes,
   } = input;
 
-  const exam = await prisma.exam.findUnique({
+  const db = txClient || prisma;
+
+  const exam = await db.exam.findUnique({
     where: { id: examId },
     include: {
       class: true,
@@ -161,7 +164,7 @@ export async function assignExamToStudents(
       );
     }
 
-    const newClass = await prisma.class.findUnique({
+    const newClass = await db.class.findUnique({
       where: { classNumber },
     });
     if (!newClass) {
@@ -201,7 +204,7 @@ export async function assignExamToStudents(
 
   // 4. Validate students are active
   const targetStudentIds = normalizedEligibility.map((item) => item.studentId);
-  const activeStudents = await prisma.student.findMany({
+  const activeStudents = await db.student.findMany({
     where: {
       id: { in: targetStudentIds },
       status: StudentStatus.ACTIVE,
@@ -217,7 +220,7 @@ export async function assignExamToStudents(
     throw new Error("None of the targeted students are currently active.");
   }
 
-  return await prisma.$transaction(async (tx) => {
+  const executeAssignments = async (tx: Prisma.TransactionClient) => {
     // 5. Update Exam timing / status / classId
     const updateExamData: Record<string, unknown> = {};
     if (exam.status === ExamStatus.DRAFT) {
@@ -303,7 +306,13 @@ export async function assignExamToStudents(
       ineligibleCount,
       assignments,
     };
-  });
+  };
+
+  if (txClient) {
+    return await executeAssignments(txClient);
+  }
+
+  return await prisma.$transaction(executeAssignments);
 }
 
 export async function getExamAssignments(examId: string) {
