@@ -1,5 +1,4 @@
-import fs from "fs";
-import path from "path";
+import { execSync } from "child_process";
 
 export function redactSecrets(input: string): string {
   const secrets = [
@@ -7,6 +6,7 @@ export function redactSecrets(input: string): string {
     /DATABASE_URL=["']?[^"'\s]+["']?/gi,
     /AUTH_SECRET=["']?[^"'\s]+["']?/gi,
     /OMNIROUTE_API_KEY=["']?[^"'\s]+["']?/gi,
+    /[a-zA-Z0-9_-]{32,}/g,
   ];
 
   let output = input;
@@ -16,23 +16,21 @@ export function redactSecrets(input: string): string {
   return output;
 }
 
-export function getRepoRoot(): string {
-  return process.cwd();
-}
-
-export function isGitClean(): boolean {
+export function getGitStatus(): string {
   try {
-    const output = require("child_process").execSync("git status --short").toString();
-    return output.trim() === "";
+    return execSync("git status --short").toString();
   } catch {
-    return false;
+    return "";
   }
 }
 
-export function getGitStatus(): string {
+export function getChangedFiles(): string[] {
   try {
-    return require("child_process").execSync("git status --short").toString();
+    return execSync("git diff --name-only HEAD~1") // Check changes against last commit or current HEAD
+      .toString()
+      .split("\n")
+      .filter((f) => f.length > 0);
   } catch {
-    return "";
+    return [];
   }
 }

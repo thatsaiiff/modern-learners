@@ -2,10 +2,12 @@ import { loadState, saveState, getIncompletePhase, State, Phase } from "./state"
 import { execSync, spawn } from "child_process";
 import fs from "fs";
 import path from "path";
-import { redactSecrets, getGitStatus } from "./utils";
+import { redactSecrets, getGitStatus, getChangedFiles } from "./utils";
+import { saveHistory } from "./history";
 
 const ARGS = process.argv.slice(2);
 const COMMAND = ARGS[0];
+const PID_FILE = ".agent/controller.pid";
 
 function checkSafety() {
   if (path.basename(process.cwd()) !== "Modern_Learners") {
@@ -14,9 +16,18 @@ function checkSafety() {
   }
 }
 
+function cleanupPid() {
+  if (fs.existsSync(PID_FILE)) fs.unlinkSync(PID_FILE);
+}
+
+process.on("SIGINT", () => {
+    cleanupPid();
+    process.exit(1);
+});
+
 async function runCommand() {
   checkSafety();
-  const state = loadState();
+  let state = loadState();
   const phase = getIncompletePhase(state);
 
   if (!phase) {
@@ -24,30 +35,31 @@ async function runCommand() {
     return;
   }
 
-  const pidFile = ".agent/controller.pid";
-  if (fs.existsSync(pidFile)) {
-    const pid = fs.readFileSync(pidFile, "utf-8");
-    console.error(`Agent is already running (PID: ${pid}). Check .agent/controller.pid`);
-    process.exit(1);
+  // Lockfile
+  if (fs.existsSync(PID_FILE)) {
+      const pid = fs.readFileSync(PID_FILE, "utf-8");
+      try {
+          process.kill(parseInt(pid), 0);
+          console.error(`Agent already running (PID: ${pid}).`);
+          process.exit(1);
+      } catch {
+          console.warn("Stale PID found, cleaning up...");
+          cleanupPid();
+      }
   }
+  fs.writeFileSync(PID_FILE, process.pid.toString());
 
-  fs.writeFileSync(pidFile, process.pid.toString());
-  
-  const INBOX_TASK = ".agent/inbox/next-task.md";
-  const taskPath = fs.existsSync(INBOX_TASK) ? INBOX_TASK : ".agent/current-task.md";
-  
+  // Inbox Task
+  const taskPath = ".agent/inbox/next-task.md";
   if (!fs.existsSync(taskPath)) {
-    console.error("No task found in .agent/inbox/next-task.md or .agent/current-task.md");
-    fs.unlinkSync(pidFile);
-    process.exit(1);
+      console.error("No task found in .agent/inbox/next-task.md");
+      cleanupPid();
+      process.exit(1);
   }
-
-  const gitPreCheck = getGitStatus();
-  console.log("Git state before run:\n", gitPreCheck);
 
   const runId = Date.now().toString();
   const logPath = `.agent/logs/${phase.id}-${runId}.log`;
-  if (!fs.existsSync(".agent/logs")) fs.mkdirSync(".agent/logs");
+  if (!fs.existsSync(".agent/logs")) fs.mkdirSync(".agent/logs", { recursive: true });
   const logStream = fs.createWriteStream(logPath);
 
   state.lastRun = {
@@ -58,12 +70,11 @@ async function runCommand() {
   };
   saveState(state);
 
+  console.log(`Starting phase: ${phase.id}. Logging to ${logPath}`);
+
   try {
-    console.log(`Starting phase: ${phase.id} - ${phase.title}`);
-    
-    // Launch opencode
     const opencode = spawn("npx", ["opencode", "run", taskPath], {
-      stdio: ["pipe", "pipe", "pipe"],
+        stdio: ["pipe", "pipe", "pipe"],
     });
 
     opencode.stdout.on("data", (data) => logStream.write(redactSecrets(data.toString())));
@@ -71,69 +82,84 @@ async function runCommand() {
 
     opencode.on("close", (code) => {
       logStream.end();
-      fs.unlinkSync(pidFile);
+      cleanupPid();
       
       const finishedState = loadState();
       
-      const gitPostCheck = getGitStatus();
-      console.log("Git state after run:\n", gitPostCheck);
+      // Git scope safety check
+      const changedFiles = getChangedFiles();
+      const scopeViolation = changedFiles.filter(f => !phase.scope.some(s => f.startsWith(s) || s === "*"));
+
+      if (scopeViolation.length > 0) {
+        console.error("Scope violation detected! Files changed outside allowed scope:", scopeViolation);
+        finalizeRun(phase.id, finishedState, code || 1, "FAILED", runId, logPath);
+        return;
+      }
 
       if (code === 0) {
-        console.log("Phase task process finished successfully.");
-        updatePhaseStatus(phase.id, "VERIFYING", finishedState, {
-            runId,
-            exitCode: code,
-            status: "SUCCESS"
-        });
-        runVerification(phase);
+        console.log("Task finished, verifying...");
+        const verified = runVerification(phase);
+        finalizeRun(phase.id, finishedState, 0, verified ? "SUCCESS" : "FAILED", runId, logPath);
       } else {
-        console.error(`Task process failed with code ${code}`);
-        updatePhaseStatus(phase.id, "FAILED", finishedState, {
-            runId,
-            exitCode: code,
-            status: "FAILED"
-        });
+        finalizeRun(phase.id, finishedState, code || 1, "FAILED", runId, logPath);
       }
     });
 
   } catch (err) {
-    fs.unlinkSync(pidFile);
+    cleanupPid();
     throw err;
   }
 }
 
-function updatePhaseStatus(phaseId: string, status: any, state: State, runDetails: any) {
-  const phase = state.phases.find((p) => p.id === phaseId);
-  if (phase) {
-    phase.status = status;
-    state.lastRun = {
-        ...state.lastRun!,
-        completedAt: new Date().toISOString(),
-        ...runDetails
-    };
-    saveState(state);
-  }
+function finalizeRun(phaseId: string, state: State, exitCode: number, status: "SUCCESS" | "FAILED" | "INTERRUPTED", runId: string, logPath: string) {
+    const phase = state.phases.find((p) => p.id === phaseId);
+    if (phase) {
+        if (status === "SUCCESS") phase.status = "COMPLETED";
+        else phase.status = "FAILED";
+        
+        state.lastRun = {
+            runId,
+            startedAt: state.lastRun!.startedAt,
+            completedAt: new Date().toISOString(),
+            exitCode,
+            status,
+            logPath
+        };
+        saveState(state);
+        saveHistory(phaseId, runId, state.lastRun);
+        console.log(`Run ${runId} finalized with status ${status}`);
+    }
 }
 
-function runVerification(phase: Phase) {
-    console.log(`Running verification for ${phase.id}...`);
-    for (const cmd of phase.verificationCommands) {
-        console.log(`-> Running: ${cmd}`);
-        execSync(cmd, { stdio: "inherit" });
+function runVerification(phase: Phase): boolean {
+    try {
+        for (const cmd of phase.verificationCommands) {
+            console.log(`-> Running: ${cmd}`);
+            execSync(cmd, { stdio: "inherit" });
+        }
+        return true;
+    } catch {
+        console.error("Verification failed.");
+        return false;
     }
-    updatePhaseStatus(phase.id, "COMPLETED", loadState(), {});
-    console.log("Phase verification finished.");
 }
 
 switch (COMMAND) {
   case "status":
-    const s = loadState();
-    console.log(JSON.stringify(s, null, 2));
+    console.log(JSON.stringify(loadState(), null, 2));
     break;
   case "run":
     runCommand();
     break;
+  case "next":
+    const s = loadState();
+    const incomplete = getIncompletePhase(s);
+    if (incomplete && incomplete.status === "COMPLETED") {
+       console.log(`Phase ${incomplete.id} completed. Advancing.`);
+    } else {
+       console.log(`Cannot advance: Phase ${incomplete?.id} is currently ${incomplete?.status}.`);
+    }
+    break;
   default:
-    console.log("Commands: status, run, next, verify, stop");
+    console.log("Commands: status, run, next");
 }
-
