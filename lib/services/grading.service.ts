@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { Prisma, ResultStatus } from "@prisma/client";
+import { Prisma, ResultStatus, TeacherReviewAction } from "@prisma/client";
 import { logAudit } from "./audit.service";
 import { updateOfficialAttemptSelection } from "./retake.service";
 
@@ -326,14 +326,33 @@ export async function evaluateAndCreateResult(
 
     // Update AttemptAnswer with evaluation result
     if (ans) {
+      let finalMarks = evaluation.marksAwarded;
+      
+      // Look for a teacher review for this submission
+      const submission = await db.subjectiveSubmission.findFirst({
+        where: { attemptId: attempt.id, examQuestionId: aq.examQuestionId },
+        include: { teacherReviews: { orderBy: { createdAt: "desc" }, take: 1 } }
+      });
+      
+      const review = submission?.teacherReviews[0];
+
+      // If approved/modified, use teacher's official marks instead of AI's
+      if (review && review.action !== TeacherReviewAction.REJECTED) {
+          finalMarks = review.officialMarks;
+      } else if (review && review.action === TeacherReviewAction.REJECTED) {
+          // REJECTED subjective submissions get 0 marks
+          finalMarks = 0;
+      }
+
       await db.attemptAnswer.update({
         where: { id: ans.id },
         data: {
           isCorrect: evaluation.isCorrect,
-          marksAwarded: evaluation.marksAwarded,
+          marksAwarded: finalMarks,
         },
       });
     }
+
   }
 
   // Floor raw marks at 0 unless negative marks are allowed to go below 0
