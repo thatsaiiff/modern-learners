@@ -14,7 +14,12 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate deploy",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "tsx prisma/seed.ts",
+    "agent:status": "tsx agent-controller/cli.ts status",
+    "agent:next": "tsx agent-controller/cli.ts next",
+    "agent:run": "tsx agent-controller/cli.ts run",
+    "agent:verify": "tsx agent-controller/cli.ts verify",
+    "agent:stop": "tsx agent-controller/cli.ts stop"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",
