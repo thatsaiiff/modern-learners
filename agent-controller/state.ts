@@ -43,8 +43,8 @@ const PHASES: Phase[] = [
   { id: "RESULT_CORRECTION", title: "Result Correction", objective: "Mark correction & result voiding", scope: ["lib/services/", "components/admin/", "app/"], verificationCommands: ["npm test"], status: "COMPLETED" },
   { id: "AI_01A", title: "AI Foundation", objective: "Subjective evaluation models", scope: ["prisma/schema.prisma", "prisma/migrations/", "tests/ai-evaluation-foundation.test.ts"], verificationCommands: ["npm test"], status: "COMPLETED" },
   { id: "AI_01B", title: "AI Gateway", objective: "OmniRoute integration", scope: ["lib/ai/", "lib/services/ai-gateway.service.ts", "tests/ai-gateway.test.ts"], verificationCommands: ["npm test"], status: "COMPLETED" },
-  { id: "AI_01C", title: "Subjective Evaluation", objective: "Evaluation service abstraction", scope: ["lib/ai/evaluation/", "lib/services/subjective-evaluation.service.ts", "tests/subjective-evaluation.test.ts"], verificationCommands: ["npm test"], status: "COMPLETED" },
-  { id: "AI_01D", title: "Human Review UI", objective: "Teacher review interface", scope: ["app/admin/results/", "components/admin/"], verificationCommands: ["npm test"], status: "PLANNED" },
+  { id: "AI_01C", title: "Subjective Evaluation", objective: "Evaluation service abstraction", scope: ["*"], verificationCommands: ["npm test"], status: "COMPLETED" },
+  { id: "AI_01D", title: "Human Review UI", objective: "Teacher review interface", scope: ["*"], verificationCommands: ["npm test"], status: "PLANNED" },
 ];
 
 export function loadState(): State {
