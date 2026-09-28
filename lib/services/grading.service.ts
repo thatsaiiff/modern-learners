@@ -260,7 +260,10 @@ export async function evaluateAndCreateResult(
       exam: {
         include: {
           gradingRules: { orderBy: { displayOrder: "asc" } },
-          examQuestions: { orderBy: { orderNumber: "asc" } },
+          examQuestions: { 
+            orderBy: { orderNumber: "asc" },
+            include: { subjectiveSubmissions: true }
+          },
         },
       },
       attemptQuestions: {
@@ -289,6 +292,16 @@ export async function evaluateAndCreateResult(
   // Create Question Map from ExamQuestions for snapshots
   const examQuestionMap = new Map(exam.examQuestions.map((eq) => [eq.id, eq]));
 
+  const subjectiveSubmissions = await db.subjectiveSubmission.findMany({
+    where: { attemptId: attempt.id },
+    include: { teacherReviews: { orderBy: { createdAt: "desc" }, take: 1 } },
+  });
+
+  const allSubjectiveReviewed = subjectiveSubmissions.length > 0 && subjectiveSubmissions.every(s => s.teacherReviews.length > 0);
+  
+  const isOfficial = !attempt.exam.examQuestions.some(eq => eq.subjectiveSubmissions.length > 0) || allSubjectiveReviewed;
+
+
   for (const aq of attempt.attemptQuestions) {
     const examQ = examQuestionMap.get(aq.examQuestionId);
     const snap = (examQ?.questionSnapshot || aq.questionSnapshot) as unknown as RawSnapshotData;
@@ -314,36 +327,22 @@ export async function evaluateAndCreateResult(
       exam.negativeMarkValue
     );
 
-    if (evaluation.status === "CORRECT") {
-      correctCount++;
-      rawMarks += evaluation.marksAwarded;
-    } else if (evaluation.status === "WRONG") {
-      wrongCount++;
-      rawMarks += evaluation.marksAwarded;
-    } else {
-      unansweredCount++;
-    }
+    const isSubjective = !!subjectiveSubmissions.find(s => s.examQuestionId === aq.examQuestionId);
+    let finalMarks = evaluation.marksAwarded;
 
-    // Update AttemptAnswer with evaluation result
     if (ans) {
-      let finalMarks = evaluation.marksAwarded;
-      
-      // Look for a teacher review for this submission
-      const submission = await db.subjectiveSubmission.findFirst({
-        where: { attemptId: attempt.id, examQuestionId: aq.examQuestionId },
-        include: { teacherReviews: { orderBy: { createdAt: "desc" }, take: 1 } }
-      });
-      
-      const review = submission?.teacherReviews[0];
-
-      // If approved/modified, use teacher's official marks instead of AI's
-      if (review && review.action !== TeacherReviewAction.REJECTED) {
+      if (isSubjective) {
+        const submission = subjectiveSubmissions.find(s => s.examQuestionId === aq.examQuestionId);
+        const review = submission?.teacherReviews[0];
+        if (review && review.action !== TeacherReviewAction.REJECTED) {
           finalMarks = review.officialMarks;
-      } else if (review && review.action === TeacherReviewAction.REJECTED) {
-          // REJECTED subjective submissions get 0 marks
+        } else if (review && review.action === TeacherReviewAction.REJECTED) {
           finalMarks = 0;
+        } else if (submission && !review) {
+          finalMarks = 0;
+        }
       }
-
+      
       await db.attemptAnswer.update({
         where: { id: ans.id },
         data: {
@@ -352,6 +351,21 @@ export async function evaluateAndCreateResult(
         },
       });
     }
+
+    if (!isSubjective) {
+        if (evaluation.status === "CORRECT") {
+          correctCount++;
+          rawMarks += evaluation.marksAwarded;
+        } else if (evaluation.status === "WRONG") {
+          wrongCount++;
+          rawMarks += evaluation.marksAwarded;
+        } else {
+          unansweredCount++;
+        }
+    } else {
+        rawMarks += finalMarks;
+    }
+
 
   }
 
@@ -390,7 +404,7 @@ export async function evaluateAndCreateResult(
       correctCount,
       wrongCount,
       unansweredCount,
-      isOfficial: true,
+      isOfficial
     },
   });
 
