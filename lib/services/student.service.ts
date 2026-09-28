@@ -3,6 +3,7 @@ import { StudentStatus, Prisma } from "@prisma/client";
 import { hashPin, validatePinFormat } from "@/lib/auth/hash";
 import { generateStudentCode, generateRollNumber } from "./roll.service";
 import { logAudit } from "./audit.service";
+import { getEligibleResultWhereClause } from "./result-eligibility.service";
 
 export interface CreateStudentInput {
   name: string;
@@ -249,7 +250,7 @@ export async function getStudentById(id: string) {
         orderBy: { createdAt: "desc" },
       },
       results: {
-        where: { isOfficial: true },
+        where: getEligibleResultWhereClause(),
         include: {
           exam: {
             include: { subject: true },

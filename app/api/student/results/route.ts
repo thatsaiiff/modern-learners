@@ -35,6 +35,8 @@ export async function GET() {
       passed: r.passed,
       attemptNumber: r.attempt.attemptNumber,
       isOfficial: r.isOfficial,
+      status: r.status,
+      correctionReason: r.correctionReason,
       submittedAt: r.attempt.submittedAt,
       createdAt: r.createdAt,
     }));

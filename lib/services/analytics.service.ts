@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { Prisma, StudentStatus } from "@prisma/client";
 import { ANALYTICS_THRESHOLDS, TrendDirection, AttentionSeverity } from "@/lib/analytics/constants";
 import { determineGrade } from "./grading.service";
+import { getEligibleResultWhereClause } from "./result-eligibility.service";
 
 interface SnapshotData {
   customId?: string;
@@ -101,15 +102,13 @@ export async function getAdminAnalyticsOverview(sessionId?: string) {
       },
     }),
     prisma.result.count({
-      where: {
-        isOfficial: true,
+      where: getEligibleResultWhereClause({
         createdAt: { gte: startOfMonth },
-      },
+      }),
     }),
     prisma.result.findMany({
-      where: {
-        isOfficial: true,
-        ...(targetSessionId
+      where: getEligibleResultWhereClause(
+        targetSessionId
           ? {
               student: {
                 enrollments: {
@@ -117,8 +116,8 @@ export async function getAdminAnalyticsOverview(sessionId?: string) {
                 },
               },
             }
-          : {}),
-      },
+          : undefined
+      ),
       include: {
         exam: { include: { class: true, subject: true } },
       },
@@ -224,7 +223,7 @@ export async function getStudentAnalytics(studentId: string) {
         include: { class: true, academicSession: true },
       },
       results: {
-        where: { isOfficial: true },
+        where: getEligibleResultWhereClause(),
         include: {
           exam: {
             include: { subject: true, class: true, chapter: true },
@@ -521,7 +520,7 @@ export async function getNeedsAttentionStudents(filters?: {
         include: { class: true, academicSession: true },
       },
       results: {
-        where: { isOfficial: true },
+        where: getEligibleResultWhereClause(),
         include: {
           exam: { include: { subject: true, class: true } },
           attempt: {

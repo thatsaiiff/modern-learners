@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { AttendanceStatus } from "@prisma/client";
 import { logAudit } from "./audit.service";
 import { determineGrade } from "./grading.service";
+import { getEligibleResultWhereClause } from "./result-eligibility.service";
 
 interface SnapshotTopicData {
   customId?: string;
@@ -105,16 +106,15 @@ export async function getStudentReportCardData(
           orderBy: { createdAt: "desc" },
         },
         results: {
-          where: {
-            isOfficial: true,
-            ...(targetSessionId
+          where: getEligibleResultWhereClause(
+            targetSessionId
               ? {
                   exam: {
                     // Match exam class or session if applicable
                   },
                 }
-              : {}),
-          },
+              : undefined
+          ),
           include: {
             exam: { include: { subject: true, class: true } },
             attempt: {
@@ -450,6 +450,7 @@ export async function generateCsvExport(
       "Grade",
       "Pass/Fail",
       "Official",
+      "Status",
     ];
 
     const rows = results.map((r) => [
@@ -467,6 +468,7 @@ export async function generateCsvExport(
       r.grade,
       r.passed ? "PASSED" : "FAILED",
       r.isOfficial ? "YES" : "NO",
+      r.status,
     ]);
 
     return [headers.map(escapeCsv).join(","), ...rows.map((row) => row.map(escapeCsv).join(","))].join("\n");

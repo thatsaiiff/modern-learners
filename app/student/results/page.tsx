@@ -21,6 +21,8 @@ interface ResultItem {
   passed: boolean;
   attemptNumber: number;
   isOfficial: boolean;
+  status: "ACTIVE" | "VOIDED";
+  correctionReason?: string | null;
   submittedAt: string;
 }
 
@@ -87,10 +89,16 @@ export default function StudentResultsListPage() {
                       <h4 className="font-bold text-sm sm:text-base text-slate-900">
                         {r.examTitle}
                       </h4>
-                      <Badge variant={r.passed ? "success" : "danger"}>
-                        {r.passed ? "PASSED" : "NEEDS IMPROVEMENT"}
-                      </Badge>
-                      {r.isOfficial && <Badge variant="info">Official Result</Badge>}
+                      {r.status === "VOIDED" ? (
+                        <Badge variant="outline" className="text-rose-700 border-rose-300 bg-rose-50">
+                          VOIDED / EXCLUDED
+                        </Badge>
+                      ) : (
+                        <Badge variant={r.passed ? "success" : "danger"}>
+                          {r.passed ? "PASSED" : "NEEDS IMPROVEMENT"}
+                        </Badge>
+                      )}
+                      {r.isOfficial && r.status !== "VOIDED" && <Badge variant="info">Official Result</Badge>}
                     </div>
                     <p className="text-xs text-slate-500">
                       {r.subjectName} • {r.className}

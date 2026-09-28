@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     const isOfficial = searchParams.get("isOfficial")
       ? searchParams.get("isOfficial") === "true"
       : undefined;
+    const statusParam = searchParams.get("status") || undefined;
     const search = searchParams.get("search") || undefined;
 
     const whereCondition: Prisma.ResultWhereInput = {
@@ -34,6 +35,9 @@ export async function GET(req: NextRequest) {
       ...(studentId ? { studentId } : {}),
       ...(passed !== undefined ? { passed } : {}),
       ...(isOfficial !== undefined ? { isOfficial } : {}),
+      ...(statusParam && (statusParam === "ACTIVE" || statusParam === "VOIDED")
+        ? { status: statusParam as "ACTIVE" | "VOIDED" }
+        : {}),
       ...(classNumber ? { exam: { class: { classNumber } } } : {}),
       ...(subjectCode ? { exam: { subject: { code: subjectCode.toUpperCase() } } } : {}),
       ...(search
@@ -90,6 +94,9 @@ export async function GET(req: NextRequest) {
       passed: r.passed,
       attemptNumber: r.attempt.attemptNumber,
       isOfficial: r.isOfficial,
+      status: r.status,
+      correctionReason: r.correctionReason,
+      correctedAt: r.correctedAt,
       submittedAt: r.attempt.submittedAt,
       createdAt: r.createdAt,
     }));

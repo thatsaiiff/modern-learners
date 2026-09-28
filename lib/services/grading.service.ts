@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import { Prisma, ResultStatus } from "@prisma/client";
 import { logAudit } from "./audit.service";
 import { updateOfficialAttemptSelection } from "./retake.service";
 
@@ -37,6 +37,10 @@ export interface ResultDetailsData {
     wrongCount: number;
     unansweredCount: number;
     isOfficial: boolean;
+    status: ResultStatus;
+    correctionReason?: string | null;
+    correctedAt?: Date | string | null;
+    correctedBy?: string | null;
     submittedAt: Date | string | null;
     durationSeconds: number;
     createdAt: Date | string;
@@ -517,6 +521,10 @@ export async function getResultDetails(
       wrongCount: result.wrongCount,
       unansweredCount: result.unansweredCount,
       isOfficial: result.isOfficial,
+      status: result.status,
+      correctionReason: result.correctionReason,
+      correctedAt: result.correctedAt,
+      correctedBy: result.correctedBy,
       submittedAt: attempt.submittedAt,
       durationSeconds: attempt.durationSeconds,
       createdAt: result.createdAt,
@@ -555,4 +563,230 @@ export async function getResultDetails(
     },
     questions: questionBreakdown,
   };
+}
+
+export interface CorrectResultMarksInput {
+  resultId: string;
+  rawMarks: number;
+  reason: string;
+}
+
+export interface VoidResultInput {
+  resultId: string;
+  reason: string;
+}
+
+export interface RestoreResultInput {
+  resultId: string;
+  reason: string;
+}
+
+/**
+ * Administratively corrects a student's official marks for an exam attempt.
+ * Recalculates percentage, grade, and pass status, updates official attempt status, and logs audit record.
+ */
+export async function correctResultMarks(
+  input: CorrectResultMarksInput,
+  actor: { userId: string; role: string },
+  ipAddress?: string | null
+) {
+  const { resultId, rawMarks, reason } = input;
+
+  if (!reason || !reason.trim() || reason.trim().length < 3) {
+    throw new Error("A clear justification reason is required for administrative result correction (min 3 characters).");
+  }
+
+  const existingResult = await prisma.result.findUnique({
+    where: { id: resultId },
+    include: {
+      exam: {
+        include: {
+          gradingRules: { orderBy: { displayOrder: "asc" } },
+        },
+      },
+    },
+  });
+
+  if (!existingResult) {
+    throw new Error("Result not found.");
+  }
+
+  if (rawMarks < 0 || rawMarks > existingResult.maximumMarks) {
+    throw new Error(`Corrected marks must be between 0 and maximum possible marks (${existingResult.maximumMarks}).`);
+  }
+
+  const finalRawMarks = parseFloat(rawMarks.toFixed(2));
+  const percentage = parseFloat(((finalRawMarks / existingResult.maximumMarks) * 100).toFixed(2));
+  const { grade, performanceLabel } = determineGrade(percentage, existingResult.exam.gradingRules);
+  const passed = percentage >= (existingResult.exam.passingPercentage || 80.0);
+
+  return await prisma.$transaction(async (tx) => {
+    const updatedResult = await tx.result.update({
+      where: { id: resultId },
+      data: {
+        rawMarks: finalRawMarks,
+        percentage,
+        grade,
+        performanceLabel,
+        passed,
+        status: ResultStatus.ACTIVE,
+        correctionReason: reason.trim(),
+        correctedAt: new Date(),
+        correctedBy: actor.userId,
+      },
+    });
+
+    await logAudit(
+      {
+        actorId: actor.userId,
+        actorRole: actor.role,
+        action: "RESULT_CORRECTED",
+        entityType: "Result",
+        entityId: existingResult.id,
+        oldValue: {
+          rawMarks: existingResult.rawMarks,
+          percentage: existingResult.percentage,
+          grade: existingResult.grade,
+          passed: existingResult.passed,
+          status: existingResult.status,
+        },
+        newValue: {
+          rawMarks: finalRawMarks,
+          percentage,
+          grade,
+          passed,
+          status: ResultStatus.ACTIVE,
+          reason: reason.trim(),
+        },
+        ipAddress,
+      },
+      tx
+    );
+
+    await updateOfficialAttemptSelection(existingResult.studentId, existingResult.examId, tx);
+
+    return updatedResult;
+  });
+}
+
+/**
+ * Voids/excludes an exam result from official metrics and student ranking.
+ * Retains historical attempt and result record without physical deletion.
+ */
+export async function voidResult(
+  input: VoidResultInput,
+  actor: { userId: string; role: string },
+  ipAddress?: string | null
+) {
+  const { resultId, reason } = input;
+
+  if (!reason || !reason.trim() || reason.trim().length < 3) {
+    throw new Error("A clear justification reason is required for voiding an exam result (min 3 characters).");
+  }
+
+  const existingResult = await prisma.result.findUnique({
+    where: { id: resultId },
+  });
+
+  if (!existingResult) {
+    throw new Error("Result not found.");
+  }
+
+  return await prisma.$transaction(async (tx) => {
+    const updatedResult = await tx.result.update({
+      where: { id: resultId },
+      data: {
+        status: ResultStatus.VOIDED,
+        isOfficial: false,
+        correctionReason: reason.trim(),
+        correctedAt: new Date(),
+        correctedBy: actor.userId,
+      },
+    });
+
+    await logAudit(
+      {
+        actorId: actor.userId,
+        actorRole: actor.role,
+        action: "RESULT_VOIDED",
+        entityType: "Result",
+        entityId: existingResult.id,
+        oldValue: {
+          status: existingResult.status,
+          isOfficial: existingResult.isOfficial,
+          rawMarks: existingResult.rawMarks,
+          percentage: existingResult.percentage,
+        },
+        newValue: {
+          status: ResultStatus.VOIDED,
+          isOfficial: false,
+          reason: reason.trim(),
+        },
+        ipAddress,
+      },
+      tx
+    );
+
+    await updateOfficialAttemptSelection(existingResult.studentId, existingResult.examId, tx);
+
+    return updatedResult;
+  });
+}
+
+/**
+ * Restores a previously voided exam result to ACTIVE status.
+ */
+export async function restoreResult(
+  input: RestoreResultInput,
+  actor: { userId: string; role: string },
+  ipAddress?: string | null
+) {
+  const { resultId, reason } = input;
+
+  if (!reason || !reason.trim()) {
+    throw new Error("A reason is required to restore a voided result.");
+  }
+
+  const existingResult = await prisma.result.findUnique({
+    where: { id: resultId },
+  });
+
+  if (!existingResult) {
+    throw new Error("Result not found.");
+  }
+
+  return await prisma.$transaction(async (tx) => {
+    const updatedResult = await tx.result.update({
+      where: { id: resultId },
+      data: {
+        status: ResultStatus.ACTIVE,
+        correctionReason: reason.trim(),
+        correctedAt: new Date(),
+        correctedBy: actor.userId,
+      },
+    });
+
+    await logAudit(
+      {
+        actorId: actor.userId,
+        actorRole: actor.role,
+        action: "RESULT_RESTORED",
+        entityType: "Result",
+        entityId: existingResult.id,
+        oldValue: {
+          status: existingResult.status,
+        },
+        newValue: {
+          status: ResultStatus.ACTIVE,
+          reason: reason.trim(),
+        },
+        ipAddress,
+      },
+      tx
+    );
+
+    await updateOfficialAttemptSelection(existingResult.studentId, existingResult.examId, tx);
+
+    return updatedResult;
+  });
 }

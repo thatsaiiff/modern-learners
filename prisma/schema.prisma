@@ -156,6 +156,11 @@ enum AttendanceMethod {
   STUDENT_CHECKIN
 }
 
+enum ResultStatus {
+  ACTIVE
+  VOIDED
+}
+
 model User {
   id           String    @id @default(uuid())
   email        String?   @unique
@@ -586,8 +591,8 @@ model AttemptAnswer {
 }
 
 model Result {
-  id               String   @id @default(uuid())
-  attemptId        String   @unique
+  id               String       @id @default(uuid())
+  attemptId        String       @unique
   studentId        String
   examId           String
   rawMarks         Float
@@ -596,12 +601,16 @@ model Result {
   grade            String // e.g. "OP", "Outstanding", "Pass", "Fail"
   performanceLabel String // e.g. "Outstandingly Perfect", "Pass"
   passed           Boolean
-  correctCount     Int      @default(0)
-  wrongCount       Int      @default(0)
-  unansweredCount  Int      @default(0)
-  isOfficial       Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  correctCount     Int          @default(0)
+  wrongCount       Int          @default(0)
+  unansweredCount  Int          @default(0)
+  isOfficial       Boolean      @default(true)
+  status           ResultStatus @default(ACTIVE)
+  correctionReason String?
+  correctedAt      DateTime?
+  correctedBy      String?      // Admin user ID
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   attempt ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   student Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -610,6 +619,8 @@ model Result {
   @@index([studentId])
   @@index([examId])
   @@index([isOfficial])
+  @@index([status])
+  @@index([isOfficial, status])
 }
 
 model RetakeRequest {

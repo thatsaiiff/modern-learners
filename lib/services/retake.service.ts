@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { Prisma, RetakeStatus, MultiAttemptRule, AssignmentStatus } from "@prisma/client";
+import { Prisma, RetakeStatus, MultiAttemptRule, AssignmentStatus, ResultStatus } from "@prisma/client";
 import { logAudit } from "./audit.service";
 
 export interface RequestRetakeInput {
@@ -38,43 +38,57 @@ export async function updateOfficialAttemptSelection(
     return;
   }
 
-  if (results.length === 1) {
-    await db.result.update({
-      where: { id: results[0].id },
-      data: { isOfficial: true },
-    });
+  // Filter only active results for official consideration
+  const activeResults = results.filter((r) => r.status !== ResultStatus.VOIDED);
+
+  if (activeResults.length === 0) {
+    // All results are voided; set isOfficial = false on all
+    for (const r of results) {
+      if (r.isOfficial) {
+        await db.result.update({
+          where: { id: r.id },
+          data: { isOfficial: false },
+        });
+      }
+    }
     return;
   }
 
-  let officialResultId = results[0].id;
-  const rule = exam.multiAttemptRule || MultiAttemptRule.BEST;
+  let officialResultId = activeResults[0].id;
 
-  if (rule === MultiAttemptRule.FIRST) {
-    // Earliest created attempt
-    officialResultId = results[0].id;
-  } else if (rule === MultiAttemptRule.LATEST) {
-    // Most recent attempt
-    officialResultId = results[results.length - 1].id;
-  } else if (rule === MultiAttemptRule.BEST) {
-    // Highest percentage (tie-break on latest)
-    let bestScore = -1;
-    for (const r of results) {
-      if (r.percentage >= bestScore) {
-        bestScore = r.percentage;
-        officialResultId = r.id;
+  if (activeResults.length > 1) {
+    const rule = exam.multiAttemptRule || MultiAttemptRule.BEST;
+
+    if (rule === MultiAttemptRule.FIRST) {
+      // Earliest created active attempt
+      officialResultId = activeResults[0].id;
+    } else if (rule === MultiAttemptRule.LATEST) {
+      // Most recent active attempt
+      officialResultId = activeResults[activeResults.length - 1].id;
+    } else if (rule === MultiAttemptRule.BEST) {
+      // Highest percentage among active (tie-break on latest)
+      let bestScore = -1;
+      for (const r of activeResults) {
+        if (r.percentage >= bestScore) {
+          bestScore = r.percentage;
+          officialResultId = r.id;
+        }
       }
+    } else if (rule === MultiAttemptRule.TEACHER_SELECTED) {
+      const explicitlyOfficial = activeResults.find((r) => r.isOfficial);
+      officialResultId = explicitlyOfficial ? explicitlyOfficial.id : activeResults[activeResults.length - 1].id;
     }
-  } else if (rule === MultiAttemptRule.TEACHER_SELECTED) {
-    const explicitlyOfficial = results.find((r) => r.isOfficial);
-    officialResultId = explicitlyOfficial ? explicitlyOfficial.id : results[results.length - 1].id;
   }
 
   // Update all results for this student and exam
   for (const r of results) {
-    await db.result.update({
-      where: { id: r.id },
-      data: { isOfficial: r.id === officialResultId },
-    });
+    const shouldBeOfficial = r.status !== ResultStatus.VOIDED && r.id === officialResultId;
+    if (r.isOfficial !== shouldBeOfficial) {
+      await db.result.update({
+        where: { id: r.id },
+        data: { isOfficial: shouldBeOfficial },
+      });
+    }
   }
 }
 

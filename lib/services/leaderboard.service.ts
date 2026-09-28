@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { Prisma, StudentStatus } from "@prisma/client";
+import { getEligibleResultWhereClause } from "./result-eligibility.service";
 
 export type LeaderboardType = "PASS_RATE" | "TOTAL_MARKS" | "AVERAGE_PERCENTAGE";
 
@@ -160,12 +161,11 @@ export async function getLeaderboard(
         include: { class: true },
       },
       results: {
-        where: {
-          isOfficial: true,
+        where: getEligibleResultWhereClause({
           ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
           ...(filters.subjectCode ? { exam: { subject: { code: filters.subjectCode.toUpperCase() } } } : {}),
           ...(filters.classNumber ? { exam: { class: { classNumber: filters.classNumber } } } : {}),
-        },
+        }),
         include: {
           exam: true,
           attempt: true,

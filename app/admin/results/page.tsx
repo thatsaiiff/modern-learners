@@ -33,6 +33,8 @@ interface ResultRow {
   passed: boolean;
   attemptNumber: number;
   isOfficial: boolean;
+  status: "ACTIVE" | "VOIDED";
+  correctionReason?: string | null;
   submittedAt: string;
 }
 
@@ -42,6 +44,7 @@ export default function AdminResultsPage() {
   const [search, setSearch] = useState("");
   const [classFilter, setClassFilter] = useState("all");
   const [passedFilter, setPassedFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchResults = useCallback(async (page = 1) => {
@@ -55,6 +58,7 @@ export default function AdminResultsPage() {
       if (search.trim()) params.append("search", search.trim());
       if (classFilter !== "all") params.append("classNumber", classFilter);
       if (passedFilter !== "all") params.append("passed", passedFilter);
+      if (statusFilter !== "all") params.append("status", statusFilter);
 
       const res = await fetch(`/api/results?${params.toString()}`);
       const data = await res.json();
@@ -68,7 +72,7 @@ export default function AdminResultsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [search, classFilter, passedFilter]);
+  }, [search, classFilter, passedFilter, statusFilter]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -138,6 +142,16 @@ export default function AdminResultsPage() {
               <option value="true">Passed (≥80%)</option>
               <option value="false">Needs Improvement</option>
             </select>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-indigo-600 focus:outline-none"
+            >
+              <option value="all">All Statuses</option>
+              <option value="ACTIVE">Active Only</option>
+              <option value="VOIDED">Voided Only</option>
+            </select>
           </div>
         </CardContent>
       </Card>
@@ -178,9 +192,15 @@ export default function AdminResultsPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center space-x-2">
                           <h4 className="font-bold text-sm text-slate-900 truncate">{r.studentName}</h4>
-                          <Badge variant={r.passed ? "success" : "danger"}>
-                            {r.passed ? "Pass" : "Fail"}
-                          </Badge>
+                          {r.status === "VOIDED" ? (
+                            <Badge variant="outline" className="text-rose-700 border-rose-300 bg-rose-50">
+                              Voided
+                            </Badge>
+                          ) : (
+                            <Badge variant={r.passed ? "success" : "danger"}>
+                              {r.passed ? "Pass" : "Fail"}
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-xs text-slate-500 font-mono tabular-nums">
                           Roll: {r.rollNumber} • ID: <span className="text-indigo-600 font-bold">{r.studentCode}</span>
@@ -252,9 +272,15 @@ export default function AdminResultsPage() {
                         <td className="px-4 py-3.5 font-bold text-indigo-700 tabular-nums">{r.percentage}%</td>
                         <td className="px-4 py-3.5 font-semibold text-slate-800">{r.grade}</td>
                         <td className="px-4 py-3.5">
-                          <Badge variant={r.passed ? "success" : "danger"}>
-                            {r.passed ? "Pass" : "Fail"}
-                          </Badge>
+                          {r.status === "VOIDED" ? (
+                            <Badge variant="outline" className="text-rose-700 border-rose-300 bg-rose-50">
+                              Voided / Excluded
+                            </Badge>
+                          ) : (
+                            <Badge variant={r.passed ? "success" : "danger"}>
+                              {r.passed ? "Pass" : "Fail"}
+                            </Badge>
+                          )}
                         </td>
                         <td className="px-4 py-3.5 text-right">
                           <Link href={`/admin/results/${r.id}`}>
