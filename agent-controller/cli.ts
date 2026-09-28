@@ -56,6 +56,7 @@ async function runCommand() {
       cleanupPid();
       process.exit(1);
   }
+  const taskContent = fs.readFileSync(taskPath, "utf-8");
 
   const runId = Date.now().toString();
   const logPath = `.agent/logs/${phase.id}-${runId}.log`;
@@ -73,9 +74,13 @@ async function runCommand() {
   console.log(`Starting phase: ${phase.id}. Logging to ${logPath}`);
 
   try {
-    const opencode = spawn("npx", ["opencode", "run", taskPath], {
+    const opencode = spawn("npx", ["opencode", "run", "--auto"], {
         stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env, CI: "true" },
     });
+    
+    opencode.stdin.write(taskContent);
+    opencode.stdin.end();
 
     opencode.stdout.on("data", (data) => logStream.write(redactSecrets(data.toString())));
     opencode.stderr.on("data", (data) => logStream.write(redactSecrets(data.toString())));
@@ -92,16 +97,17 @@ async function runCommand() {
 
       if (scopeViolation.length > 0) {
         console.error("Scope violation detected! Files changed outside allowed scope:", scopeViolation);
-        finalizeRun(phase.id, finishedState, code || 1, "FAILED", runId, logPath);
+        finalizeRun(phase.id, finishedState, code || 1, "FAILED", runId, logPath, false);
         return;
       }
 
       if (code === 0) {
         console.log("Task finished, verifying...");
         const verified = runVerification(phase);
-        finalizeRun(phase.id, finishedState, 0, verified ? "SUCCESS" : "FAILED", runId, logPath);
+        finalizeRun(phase.id, finishedState, 0, verified ? "SUCCESS" : "FAILED", runId, logPath, verified);
       } else {
-        finalizeRun(phase.id, finishedState, code || 1, "FAILED", runId, logPath);
+        console.error(`Task process failed with code ${code}`);
+        finalizeRun(phase.id, finishedState, code || 1, "FAILED", runId, logPath, false);
       }
     });
 
@@ -111,10 +117,10 @@ async function runCommand() {
   }
 }
 
-function finalizeRun(phaseId: string, state: State, exitCode: number, status: "SUCCESS" | "FAILED" | "INTERRUPTED", runId: string, logPath: string) {
+function finalizeRun(phaseId: string, state: State, exitCode: number, status: "SUCCESS" | "FAILED" | "INTERRUPTED", runId: string, logPath: string, verified: boolean) {
     const phase = state.phases.find((p) => p.id === phaseId);
     if (phase) {
-        if (status === "SUCCESS") phase.status = "COMPLETED";
+        if (verified) phase.status = "COMPLETED";
         else phase.status = "FAILED";
         
         state.lastRun = {
@@ -152,12 +158,14 @@ switch (COMMAND) {
     runCommand();
     break;
   case "next":
-    const s = loadState();
-    const incomplete = getIncompletePhase(s);
-    if (incomplete && incomplete.status === "COMPLETED") {
-       console.log(`Phase ${incomplete.id} completed. Advancing.`);
+    let s = loadState();
+    const incompleteIndex = s.phases.findIndex((p) => p.status !== "COMPLETED");
+    if (incompleteIndex !== -1 && s.phases[incompleteIndex].status === "COMPLETED") {
+       s.currentPhaseId = s.phases[incompleteIndex + 1]?.id || s.currentPhaseId;
+       saveState(s);
+       console.log(`Advanced to phase ${s.currentPhaseId}`);
     } else {
-       console.log(`Cannot advance: Phase ${incomplete?.id} is currently ${incomplete?.status}.`);
+       console.log(`Cannot advance: Current phase ${s.phases[incompleteIndex]?.id || "unknown or complete"} is ${s.phases[incompleteIndex]?.status}.`);
     }
     break;
   default:
