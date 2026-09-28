@@ -215,12 +215,5 @@
       "status": "FAILED"
     }
   ],
-  "lastRun": {
-    "runId": "1790614095808",
-    "startedAt": "2026-09-28T16:48:15.808Z",
-    "completedAt": "2026-09-28T16:48:37.230Z",
-    "exitCode": 1,
-    "status": "FAILED",
-    "logPath": ".agent/logs/AI_01D-1790614095808.log"
-  }
+  "lastRun": null
 }

@@ -1,8 +1,0 @@
-{
-  "runId": "1790613773746",
-  "startedAt": "2026-09-28T16:42:53.746Z",
-  "completedAt": "2026-09-28T16:43:14.253Z",
-  "exitCode": 1,
-  "status": "FAILED",
-  "logPath": ".agent/logs/AI_01D-1790613773746.log"
-}
