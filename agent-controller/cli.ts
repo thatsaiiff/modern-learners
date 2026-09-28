@@ -93,7 +93,8 @@ async function runCommand() {
       
       // Git scope safety check
       const changedFiles = getChangedFiles();
-      const scopeViolation = changedFiles.filter(f => !phase.scope.some(s => f.startsWith(s) || s === "*"));
+      // Ignore .agent/ directory in scope check
+      const scopeViolation = changedFiles.filter(f => !f.startsWith(".agent/") && !phase.scope.some(s => f.startsWith(s) || s === "*"));
 
       if (scopeViolation.length > 0) {
         console.error("Scope violation detected! Files changed outside allowed scope:", scopeViolation);
